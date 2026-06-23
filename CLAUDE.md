@@ -28,6 +28,8 @@ A from-scratch rewrite of the shell-based `claude-code-profiles` (upstream `gith
 
 The binary does everything (management + launching) and **never shadows the real `claude`**. Shell integration (M2) only adds the parts a child process physically cannot do: session `use` and per-directory auto-select.
 
+- `src/core/autodir.ts` — `findMarker` (walk up for a `.shannon` file) + `resolveAuto` (decide set/unset/none against the `SHANNON_AUTO` marker env var). Used by the internal `__auto` command the shell hooks call on each directory change.
+
 - `src/cli.ts` — entry (`#!/usr/bin/env node`); `await dispatch(argv)`.
 - `src/commands.ts` — dispatch (known subcommand → manage; bare / `run` / `--` / unknown token → launch) plus handlers and help text.
 - `src/launch.ts` — `findClaude()` (PATH/PATHEXT scan) + `launchClaude()` (spawns the real claude with the resolved `CLAUDE_CONFIG_DIR`).
@@ -66,7 +68,7 @@ Profile names must match `[A-Za-z0-9_-]+` (reject empty, leading `.`, `..`, `/`,
 ## Roadmap
 
 - **M1 (done)** — profile management, launcher, clone, tests.
-- **M2** — `shannon init <bash|zsh|fish|pwsh>`: a shell-function overlay that `eval`s the CLI's `use --emit <shell>` line to mutate the live shell, plus a `cd` hook reading a per-directory `.shannon` file for auto-select. (Currently a stub.)
+- **M2 (done)** — `shannon init <bash|zsh|fish|pwsh>`: a shell-function overlay that `eval`s the CLI's `use --emit <shell>` line to mutate the live shell, plus a `cd`/prompt hook that runs the internal `__auto` command to apply a per-directory `.shannon` file. Verified live on bash and PowerShell.
 - **M3** — clone/template polish (`create --from <src>`, richer templates).
 - **M4** — release CI (publish + binaries; pin GitHub Actions by commit SHA).
 - **M5** — docs polish (no analytics).

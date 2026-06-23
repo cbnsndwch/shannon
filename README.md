@@ -26,6 +26,41 @@ shannon clone work test      # copy a profile (credentials omitted)
 
 Management subcommands: `create`, `list`, `default`, `which`, `use`, `clone`, `delete`, `status`, `init`. Run `shannon help` for details.
 
+## Shell integration
+
+The launcher already resolves the default profile, but two things need a shell function: making `use` switch the *live* shell, and auto-selecting a profile when you `cd` into a project. Add the line for your shell to its startup file:
+
+```sh
+# bash — ~/.bashrc
+eval "$(shannon init bash)"
+
+# zsh — ~/.zshrc
+eval "$(shannon init zsh)"
+
+# fish — ~/.config/fish/config.fish
+shannon init fish | source
+
+# PowerShell — $PROFILE
+shannon init pwsh | Out-String | Invoke-Expression
+```
+
+This defines `shannon` / `claudep` / `clp` as thin wrappers around the binary. With it loaded:
+
+```sh
+shannon use personal   # switches CLAUDE_CONFIG_DIR in the current shell
+```
+
+### Per-directory auto-select
+
+Drop a `.shannon` file containing a profile name into a project, and entering that directory (or any subdirectory) automatically selects the profile:
+
+```sh
+echo work > ~/projects/acme/.shannon
+cd ~/projects/acme       # CLAUDE_CONFIG_DIR now points at the "work" profile
+```
+
+Leaving the directory reverts to the default profile. A manual `shannon use` overrides auto-select until you change directories. The nearest `.shannon` walking up from the current directory wins; an empty file means "no auto-selection here". A `.shannon` naming a missing or invalid profile is ignored.
+
 ## Profiles
 
 Profiles are stored at `%LOCALAPPDATA%\claude-profiles\` (Windows) or `$XDG_DATA_HOME/claude-profiles/` (Linux/macOS, default `~/.local/share`) — the same layout as the original shell tool, so existing profiles are picked up automatically. Each profile directory is a complete Claude Code config directory.
@@ -34,7 +69,7 @@ Profile names may contain letters, digits, hyphens, and underscores.
 
 ## Status
 
-Early days. This release (M1) covers profile management and the launcher. Seamless session `use` and per-directory auto-select via `shannon init <shell>` land next.
+Profile management, the launcher, seamless session `use`, and per-directory auto-select (`shannon init <shell>`) are all in. Next up: richer templates (`create --from <src>`), release CI, and prebuilt binaries.
 
 ## Development
 
