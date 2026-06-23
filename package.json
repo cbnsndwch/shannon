@@ -1,0 +1,49 @@
+{
+  "name": "@cbnsndwch/shannon",
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.9.0+sha512.bd682d5d03fe525ef7c9fd6780c6884d1e756ac4c9c9fe00c538782824310dcf90e3ddc4f53835f06dfaebd5085e41855e0bcbb3b60de2ac5bbab89e5036f03b",
+  "description": "Manage isolated Claude Code configuration profiles — a zero-dependency TypeScript reimplementation of claude-code-profiles.",
+  "keywords": [
+    "claude-code",
+    "profiles",
+    "cli",
+    "CLAUDE_CONFIG_DIR",
+    "config"
+  ],
+  "license": "MIT",
+  "author": "cbnsndwch <serge@cbnsndwch.io>",
+  "homepage": "https://github.com/cbnsndwch/shannon#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cbnsndwch/shannon.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cbnsndwch/shannon/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "shannon": "dist/src/cli.js",
+    "claudep": "dist/src/cli.js",
+    "clp": "dist/src/cli.js"
+  },
+  "files": [
+    "dist/src",
+    "LICENSE.md",
+    "NOTICE.md",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "pnpm build && node --test \"dist/test/**/*.test.js\"",
+    "test:src": "node --test test/",
+    "start": "node dist/src/cli.js",
+    "prepublishOnly": "pnpm build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}
