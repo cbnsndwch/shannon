@@ -99,7 +99,8 @@ would make the binary fall through to launching `claude` instead of listing prof
   (`ignoredBuiltDependencies` in `pnpm-workspace.yaml`); its compiler is a
   prebuilt platform binary resolved at runtime.
 - Runtime dependencies remain **zero**; `esbuild`/`postject` are build-only
-  devDependencies and never ship in the npm tarball (`files` is `dist/src` only).
+  devDependencies and never ship in the npm tarball (the only code published is
+  `dist/src`; the rest of `files` is just the license/notice/readme).
 - Releases are created and uploaded with the preinstalled `gh` CLI rather than a
   third-party release action.
 - **Binary authenticity.** The `.sha256` sidecar is hosted in the same Release as
@@ -120,15 +121,7 @@ would make the binary fall through to launching `claude` instead of listing prof
   pnpm add -g @cbnsndwch/shannon   # needs Node >= 20
   ```
   Installs the `shannon`, `claudep`, and `clp` commands.
-- **Prebuilt binaries:** download the asset for your platform from the Release page,
-  check it against the `.sha256` sidecar (a download-integrity check, not an
-  authenticity guarantee — see *Binary authenticity* above), then make it
-  executable / put it on PATH. The binaries embed their own Node and do not
-  require a system Node.
-  - macOS: the binaries are ad-hoc-signed and not notarized. Clear quarantine before
-    first run: `xattr -d com.apple.quarantine ./shannon-macos-arm64` (or right-click →
-    Open). Notarization is deferred.
-  - Windows: the binary is unsigned, so SmartScreen may warn until reputation accrues;
-    it still runs.
-  - The three command names are interchangeable; to get `claudep`/`clp`, copy or
-    symlink the downloaded binary under those names.
+- **Prebuilt binaries:** the user-facing download, checksum, and per-OS quarantine /
+  SmartScreen instructions live in the README's [Prebuilt binaries](./README.md#prebuilt-binaries)
+  section — keep that as the single source of truth and don't duplicate it here.
+  The authenticity caveats behind it are under *Binary authenticity* above.

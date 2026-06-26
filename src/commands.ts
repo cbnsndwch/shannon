@@ -558,10 +558,10 @@ Commands:
   which [name]             Print a profile's config directory
   use <name>               Activate a profile for this shell session
   clone <src> <dst>        Copy a profile (omits credentials; --with-credentials to include)
-  delete, rm <name>        Delete a profile (--yes to skip confirmation)
+  delete, rm <name>        Delete a profile (--yes/-y/--force to skip confirmation)
   status, st               Show active + default profile
   init <shell>             Print shell integration (bash | zsh | fish | pwsh)
-  help, --help             Show this help
+  help, -h, --help         Show this help
   --version                Show version
 
 Shell integration (recommended):
