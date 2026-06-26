@@ -10,7 +10,27 @@ Manage isolated [Claude Code](https://www.anthropic.com/claude-code) configurati
 pnpm add -g @cbnsndwch/shannon
 ```
 
-This installs three interchangeable commands — `shannon`, `claudep`, and `clp`. Use whichever you like.
+This installs three interchangeable commands — `shannon`, `claudep`, and `clp`. Use whichever you like. Requires Node 20 or newer.
+
+### Prebuilt binaries
+
+Each release also ships standalone single-file binaries for Linux, macOS, and Windows on the [Releases page](https://github.com/cbnsndwch/shannon/releases). They embed their own Node runtime, so they work without a system Node — handy on machines where you don't want to install one. Download the asset for your platform, check it against the `.sha256` sidecar, then put it on your `PATH`:
+
+```sh
+# example: Linux x64
+curl -fLO https://github.com/cbnsndwch/shannon/releases/latest/download/shannon-linux-x64
+curl -fLO https://github.com/cbnsndwch/shannon/releases/latest/download/shannon-linux-x64.sha256
+sha256sum -c shannon-linux-x64.sha256
+chmod +x shannon-linux-x64
+mv shannon-linux-x64 ~/.local/bin/shannon
+```
+
+Available targets: `shannon-linux-x64`, `shannon-linux-arm64`, `shannon-macos-x64`, `shannon-macos-arm64`, `shannon-win-x64.exe`. The binary behaves identically under any of the `shannon` / `claudep` / `clp` names — copy or symlink it to whichever you want.
+
+- **macOS:** the binaries are ad-hoc-signed and not notarized. Clear quarantine before first run with `xattr -d com.apple.quarantine ./shannon-macos-arm64`, or right-click → Open.
+- **Windows:** the binary is unsigned, so SmartScreen may warn until it builds reputation; it still runs.
+
+The `.sha256` sidecar lives in the same release as the binary, so it only confirms the download arrived intact — it is **not** an authenticity guarantee against a tampered release, and the binaries are unsigned (Windows) / ad-hoc-signed and not notarized (macOS). For an authenticated, tamper-evident channel prefer the npm package, which is published with [provenance](https://docs.npmjs.com/generating-provenance-statements). npm is the canonical channel; the binaries are a convenience for Node-less installs. See [`RELEASING.md`](./RELEASING.md) for how releases are built.
 
 ## Usage
 
@@ -70,7 +90,7 @@ Profile names may contain letters, digits, hyphens, and underscores.
 
 ## Status
 
-Profile management, the launcher, seamless session `use`, per-directory auto-select (`shannon init <shell>`), and copy-on-create (`clone`, `create --from <src>`) are all in. Next up: release CI and prebuilt binaries.
+Profile management, the launcher, seamless session `use`, per-directory auto-select (`shannon init <shell>`), copy-on-create (`clone`, `create --from <src>`), and release CI (npm publish with provenance + prebuilt binaries via GitHub Releases) are all in. Next up: docs polish.
 
 ## Development
 

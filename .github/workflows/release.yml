@@ -1,0 +1,169 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  # The Node version embedded in every prebuilt binary. Pin exact and re-verify
+  # the SEA smoke test on each bump (Node SEA is still experimental). See
+  # RELEASING.md.
+  NODE_VERSION: '24.17.0'
+  # Fixed sentinel used by Node's SEA tooling; it is the same constant for all
+  # SEA builds and is not a secret.
+  FUSE: NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+
+jobs:
+  # 1) Fail fast: the test suite passes and the tag matches package.json.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Guard tag matches package version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $PKG"
+            exit 1
+          fi
+      - run: pnpm test
+
+  # 2) Create the GitHub Release shell (idempotent) for assets to attach to.
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Create release if absent
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            # A tag containing '-' is a prerelease (e.g. v0.2.0-rc.1); mark it so
+            # it is not advertised as the latest stable GitHub Release.
+            PRERELEASE=""
+            case "$GITHUB_REF_NAME" in *-*) PRERELEASE="--prerelease";; esac
+            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes \
+              --title "$GITHUB_REF_NAME" $PRERELEASE
+          fi
+
+  # 3) Build a SEA single-file binary per OS/arch and upload it to the release.
+  binaries:
+    needs: release
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,    target: linux-x64,   ext: '' }
+          - { os: ubuntu-24.04-arm, target: linux-arm64, ext: '' }
+          - { os: macos-13,         target: macos-x64,   ext: '' }   # Intel
+          - { os: macos-14,         target: macos-arm64, ext: '' }   # Apple Silicon
+          - { os: windows-latest,   target: win-x64,     ext: '.exe' }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash # Git Bash on Windows; one syntax across every runner.
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+
+      - name: Bundle (esbuild) + generate SEA blob
+        run: |
+          pnpm sea:bundle
+          pnpm sea:blob
+
+      - name: Copy node binary
+        run: node -e "require('fs').copyFileSync(process.execPath, 'shannon${{ matrix.ext }}')"
+
+      - name: Strip signature (macOS)
+        if: runner.os == 'macOS'
+        run: codesign --remove-signature "shannon${{ matrix.ext }}"
+
+      - name: Inject blob (POSIX)
+        if: runner.os != 'Windows'
+        run: |
+          ARGS=(shannon NODE_SEA_BLOB build/sea-prep.blob --sentinel-fuse "$FUSE")
+          if [ "$RUNNER_OS" = "macOS" ]; then ARGS+=(--macho-segment-name NODE_SEA); fi
+          pnpm exec postject "${ARGS[@]}"
+
+      - name: Inject blob (Windows)
+        if: runner.os == 'Windows'
+        run: pnpm exec postject shannon.exe NODE_SEA_BLOB build/sea-prep.blob --sentinel-fuse "$FUSE"
+
+      - name: Re-sign (macOS, ad-hoc)
+        if: runner.os == 'macOS'
+        run: |
+          codesign --sign - "shannon${{ matrix.ext }}"
+          codesign --verify --verbose "shannon${{ matrix.ext }}"
+
+      - name: Smoke test (exercises the real argv path)
+        run: |
+          # Assert the binary's self-reported version equals the tag (minus 'v'),
+          # so a stale hardcoded VERSION constant cannot ship undetected.
+          GOT="$(./shannon${{ matrix.ext }} --version)"
+          WANT="${GITHUB_REF_NAME#v}"
+          if [ "$GOT" != "$WANT" ]; then
+            echo "::error::binary --version reported '$GOT' but tag is '$WANT'"
+            exit 1
+          fi
+          ./shannon${{ matrix.ext }} list </dev/null    # catches an SEA argv-offset bug
+
+      - name: Stage artifact + SHA-256 sidecar
+        run: |
+          BIN="shannon-${{ matrix.target }}${{ matrix.ext }}"
+          cp "shannon${{ matrix.ext }}" "$BIN"
+          node -e "const f=process.argv[1],c=require('crypto'),fs=require('fs');fs.writeFileSync(f+'.sha256',c.createHash('sha256').update(fs.readFileSync(f)).digest('hex')+'  '+f+'\n')" "$BIN"
+
+      - name: Upload assets
+        run: |
+          BIN="shannon-${{ matrix.target }}${{ matrix.ext }}"
+          gh release upload "$GITHUB_REF_NAME" "$BIN" "$BIN.sha256" --clobber
+
+  # 4) Publish to npm LAST, only after every binary has been built and uploaded.
+  publish:
+    needs: binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance attestation
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Configure npm auth
+        run: printf '//registry.npmjs.org/:_authToken=%s\n' "$NPM_TOKEN" >> ~/.npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # `pnpm publish` runs prepublishOnly (pnpm build) so dist/ is produced
+      # before packing. `--no-git-checks` is required: a tag build runs on a
+      # detached HEAD. A prerelease tag (contains '-') publishes under the `next`
+      # dist-tag so it never moves npm's `latest`; npm does not infer this from
+      # the semver string.
+      - run: |
+          DIST_TAG=latest
+          case "$GITHUB_REF_NAME" in *-*) DIST_TAG=next;; esac
+          pnpm publish --provenance --no-git-checks --tag "$DIST_TAG"
+        env:
+          NPM_CONFIG_PROVENANCE: 'true'

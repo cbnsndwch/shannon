@@ -20,6 +20,9 @@
   "bugs": {
     "url": "https://github.com/cbnsndwch/shannon/issues"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -37,13 +40,17 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "pnpm build && node --test \"dist/test/**/*.test.js\"",
+    "test": "pnpm build && cd dist && node --test",
     "test:src": "node --test test/",
     "start": "node dist/src/cli.js",
+    "sea:bundle": "esbuild build/sea-entry.ts --bundle --platform=node --format=cjs --target=node22 --outfile=build/sea-bundle.cjs",
+    "sea:blob": "node --experimental-sea-config build/sea-config.json",
     "prepublishOnly": "pnpm build"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "esbuild": "0.28.1",
+    "postject": "1.0.0-alpha.6",
     "typescript": "^5.6.0"
   }
 }

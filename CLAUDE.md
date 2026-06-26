@@ -70,7 +70,7 @@ Profile names must match `[A-Za-z0-9_-]+` (reject empty, leading `.`, `..`, `/`,
 - **M1 (done)** — profile management, launcher, clone, tests.
 - **M2 (done)** — `shannon init <bash|zsh|fish|pwsh>`: a shell-function overlay that `eval`s the CLI's `use --emit <shell>` line to mutate the live shell, plus a `cd`/prompt hook that runs the internal `__auto` command to apply a per-directory `.shannon` file. Verified live on bash and PowerShell.
 - **M3 (done)** — `create <name> --from <src> [--with-credentials]`: create a profile by copying an existing one, sharing the single `copyProfile` routine behind `clone` (credentials omitted unless `--with-credentials`).
-- **M4** — release CI (publish + binaries; pin GitHub Actions by commit SHA).
+- **M4 (done)** — release CI: `.github/workflows/ci.yml` (build+test matrix) and `release.yml` (tag-triggered). On a `v*` tag it verifies the tag matches `package.json`, builds Node SEA single-file binaries for linux/macOS/Windows (esbuild bundles `build/sea-entry.ts` → CJS, `postject` injects the blob) uploaded to a GitHub Release via the `gh` CLI, then publishes to npm with provenance (`pnpm publish --provenance`, `id-token: write`, `NPM_TOKEN`). Every action is pinned by commit SHA; pnpm comes from corepack; build-only devDeps (`esbuild`, `postject`) are exact-pinned and runtime deps stay zero. See `RELEASING.md`.
 - **M5** — docs polish (no analytics).
 
 ## When modifying

@@ -4,3 +4,10 @@ dist/
 .DS_Store
 
 .local
+
+# SEA (single-executable) build artifacts and the binaries produced from them
+build/sea-bundle.cjs
+build/sea-prep.blob
+/shannon
+/shannon.exe
+/shannon-*

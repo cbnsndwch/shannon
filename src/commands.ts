@@ -16,7 +16,9 @@ import { resolveAuto } from "./core/autodir.js";
 import { ShannonError } from "./core/errors.js";
 import { launchClaude } from "./launch.js";
 
-const VERSION = "0.1.0";
+// Single-sourced against package.json by test/version.test.ts, so a release
+// bump cannot ship a stale self-reported version on npm or the SEA binaries.
+export const VERSION = "0.1.0";
 
 /** First tokens that mean "manage profiles" rather than "launch claude". */
 const MANAGEMENT = new Set<string>([
