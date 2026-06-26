@@ -53,7 +53,7 @@ Profile names must match `[A-Za-z0-9_-]+` (reject empty, leading `.`, `..`, `/`,
 
 ## Command interface
 
-`create <name>`, `list`/`ls`, `default [name]`, `which [name]`, `use <name>`, `clone <src> <dst> [--with-credentials]`, `delete`/`rm <name> [--yes]`, `status`/`st`, `init <shell>`, `help`, `--version`. Bare `shannon`, `shannon run …`, `shannon -- …`, or any non-subcommand token launches `claude` with the active profile. `clone` omits `.credentials.json` unless `--with-credentials` is passed.
+`create <name> [--from <src>] [--with-credentials]`, `list`/`ls`, `default [name]`, `which [name]`, `use <name>`, `clone <src> <dst> [--with-credentials]`, `delete`/`rm <name> [--yes]`, `status`/`st`, `init <shell>`, `help`, `--version`. Bare `shannon`, `shannon run …`, `shannon -- …`, or any non-subcommand token launches `claude` with the active profile. `create --from <src>` copies an existing profile (same shared copy routine as `clone`); both omit `.credentials.json` unless `--with-credentials` is passed.
 
 ## Design constraints (do not violate)
 
@@ -69,7 +69,7 @@ Profile names must match `[A-Za-z0-9_-]+` (reject empty, leading `.`, `..`, `/`,
 
 - **M1 (done)** — profile management, launcher, clone, tests.
 - **M2 (done)** — `shannon init <bash|zsh|fish|pwsh>`: a shell-function overlay that `eval`s the CLI's `use --emit <shell>` line to mutate the live shell, plus a `cd`/prompt hook that runs the internal `__auto` command to apply a per-directory `.shannon` file. Verified live on bash and PowerShell.
-- **M3** — clone/template polish (`create --from <src>`, richer templates).
+- **M3 (done)** — `create <name> --from <src> [--with-credentials]`: create a profile by copying an existing one, sharing the single `copyProfile` routine behind `clone` (credentials omitted unless `--with-credentials`).
 - **M4** — release CI (publish + binaries; pin GitHub Actions by commit SHA).
 - **M5** — docs polish (no analytics).
 

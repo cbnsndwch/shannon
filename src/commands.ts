@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline/promises";
 import {
   clearDefault,
-  cloneProfile,
+  copyProfile,
   createProfile,
   deleteProfile,
   getDefault,
@@ -71,14 +71,96 @@ async function safe(fn: () => number | Promise<number>): Promise<number> {
 }
 
 function cmdCreate(args: string[]): number {
-  const name = args[0];
+  const { name, from, withCredentials, hasFrom } = parseCreate(args);
   if (!name) {
-    throw new ShannonError("usage: shannon create <name>");
+    throw new ShannonError("usage: shannon create <name> [--from <src> [--with-credentials]]");
   }
+
+  // `create --from <src>` copies an existing profile, exactly like `clone`
+  // (same shared copy routine, same credential handling and error messages).
+  if (hasFrom) {
+    if (!from) {
+      throw new ShannonError("usage: shannon create <name> --from <src> [--with-credentials]");
+    }
+    const dir = copyProfile(from, name, { withCredentials });
+    process.stdout.write(`Created profile: ${name} (from '${from}')\n`);
+    printCopyResult(dir, withCredentials);
+    return 0;
+  }
+
+  // The credentials flag only makes sense when copying a source profile; reject
+  // it on a fresh create rather than silently ignoring it.
+  if (withCredentials) {
+    throw new ShannonError("--with-credentials only applies to 'create --from <src>'");
+  }
+
   const dir = createProfile(name);
   process.stdout.write(`Created profile: ${name}\n`);
   process.stdout.write(`Config directory: ${dir}\n`);
   return 0;
+}
+
+/**
+ * Print the shared footer for copy operations (`clone` and `create --from`):
+ * the new config directory plus, unless credentials were copied, a note that
+ * they were omitted.
+ */
+function printCopyResult(dir: string, withCredentials: boolean): void {
+  process.stdout.write(`Config directory: ${dir}\n`);
+  if (!withCredentials) {
+    process.stdout.write(
+      "(credentials omitted — sign in under the new profile, or re-run with --with-credentials)\n",
+    );
+  }
+}
+
+/**
+ * Parse `create` args: the first non-flag token is the profile name. `--from
+ * <src>` (or `--from=<src>`) selects a source profile to copy; the space-form
+ * value is consumed only when it isn't itself a flag, so a missing value
+ * surfaces as a usage error instead of swallowing the next option. `hasFrom`
+ * distinguishes a missing `--from` from one given without a value.
+ * `--with-credentials` includes secret files in a copy. Unknown options are
+ * rejected rather than silently ignored, so a typo (e.g. `--form=work`) or a
+ * `-`-prefixed name fails loudly instead of producing a blank profile.
+ */
+function parseCreate(args: string[]): {
+  name: string | null;
+  from: string | null;
+  withCredentials: boolean;
+  hasFrom: boolean;
+} {
+  let name: string | null = null;
+  let from: string | null = null;
+  let withCredentials = false;
+  let hasFrom = false;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    if (a === "--from" || a.startsWith("--from=")) {
+      hasFrom = true;
+      if (a.startsWith("--from=")) {
+        from = a.slice("--from=".length) || null;
+      } else {
+        const next = args[i + 1];
+        if (next !== undefined && !next.startsWith("-")) {
+          from = next;
+          i++;
+        }
+      }
+      continue;
+    }
+    if (a === "--with-credentials") {
+      withCredentials = true;
+      continue;
+    }
+    if (a.startsWith("-")) {
+      throw new ShannonError(`unknown option '${a}' for create`);
+    }
+    if (name === null) {
+      name = a;
+    }
+  }
+  return { name, from, withCredentials, hasFrom };
 }
 
 function cmdList(): number {
@@ -227,14 +309,9 @@ function cmdClone(args: string[]): number {
     throw new ShannonError("usage: shannon clone <source> <dest> [--with-credentials]");
   }
   const withCredentials = args.includes("--with-credentials");
-  const dir = cloneProfile(src, dst, { withCredentials });
+  const dir = copyProfile(src, dst, { withCredentials });
   process.stdout.write(`Cloned '${src}' -> '${dst}'\n`);
-  process.stdout.write(`Config directory: ${dir}\n`);
-  if (!withCredentials) {
-    process.stdout.write(
-      "(credentials omitted — sign in under the new profile, or re-run with --with-credentials)\n",
-    );
-  }
+  printCopyResult(dir, withCredentials);
   return 0;
 }
 
@@ -473,7 +550,7 @@ Usage:
   shannon <command> [args...]
 
 Commands:
-  create <name>            Create a new profile
+  create <name>            Create a new profile (--from <src> [--with-credentials] copies one)
   list, ls                 List profiles (marks default/active)
   default [name]           Get or set the default profile
   which [name]             Print a profile's config directory

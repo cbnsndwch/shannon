@@ -20,6 +20,7 @@ shannon default work         # set it as the default
 shannon                      # launch Claude Code with the active profile
 shannon list                 # list profiles (marks default/active)
 shannon clone work test      # copy a profile (credentials omitted)
+shannon create test --from work   # create a new profile by copying another
 ```
 
 `shannon` with no subcommand launches Claude Code with the resolved profile and passes through any extra arguments (`shannon --resume`, `shannon -p "..."`). Use `shannon run …` or `shannon -- …` to force pass-through.
@@ -69,7 +70,7 @@ Profile names may contain letters, digits, hyphens, and underscores.
 
 ## Status
 
-Profile management, the launcher, seamless session `use`, and per-directory auto-select (`shannon init <shell>`) are all in. Next up: richer templates (`create --from <src>`), release CI, and prebuilt binaries.
+Profile management, the launcher, seamless session `use`, per-directory auto-select (`shannon init <shell>`), and copy-on-create (`clone`, `create --from <src>`) are all in. Next up: release CI and prebuilt binaries.
 
 ## Development
 

@@ -78,10 +78,16 @@ export interface CloneOptions {
   withCredentials?: boolean;
 }
 
-/** Files never copied by `clone` unless --with-credentials is passed. */
+/** Files never copied unless --with-credentials is passed. */
 const SECRET_FILES = new Set([".credentials.json"]);
 
-export function cloneProfile(
+/**
+ * Shared copy routine behind both `clone` and `create --from`: validate both
+ * names, require <src> to exist and <dst> to be free, then recursively copy
+ * <src>'s contents into a fresh <dst> profile directory, omitting credential
+ * files unless `withCredentials` is set. Returns the new profile's directory.
+ */
+export function copyProfile(
   src: string,
   dst: string,
   opts: CloneOptions = {},

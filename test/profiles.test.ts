@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  cloneProfile,
+  copyProfile,
   createProfile,
   getDefault,
   listProfiles,
@@ -41,12 +41,12 @@ test("clone omits credentials by default and includes them with the flag", () =>
   writeFileSync(join(dir, "settings.json"), "{}");
   writeFileSync(join(dir, ".credentials.json"), "secret");
 
-  cloneProfile("work", "copy", {}, env);
+  copyProfile("work", "copy", {}, env);
   const copy = profileDir("copy", env);
   assert.equal(existsSync(join(copy, "settings.json")), true, "settings copied");
   assert.equal(existsSync(join(copy, ".credentials.json")), false, "credentials omitted");
 
-  cloneProfile("work", "copy-secrets", { withCredentials: true }, env);
+  copyProfile("work", "copy-secrets", { withCredentials: true }, env);
   const copy2 = profileDir("copy-secrets", env);
   assert.equal(existsSync(join(copy2, ".credentials.json")), true, "credentials included");
 });
