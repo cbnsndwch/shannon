@@ -1,0 +1,41 @@
+{
+    "cSpell.words": ["worktree", "oxfmt", "oxlint"],
+    "debug.inlineValues": "on",
+    "editor.codeActionsOnSave": {
+        "source.fixAll.oxc": "explicit"
+    },
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true,
+    "editor.rulers": [80],
+    "explorer.fileNesting.enabled": true,
+    "explorer.fileNesting.patterns": {
+        ".dev.vars": ".dev.vars.*",
+        ".env": ".env.*",
+        ".gitignore": ".gitkeep,.gitattributes",
+        ".oxlintrc.json": ".oxfmtrc.json",
+        "*.js": "${capture}.js.map, ${capture}.min.js, ${capture}.d.ts, ${capture}.http",
+        "*.json": "${capture}.js,${capture}.ts",
+        "*.ts": "${capture}.js,${capture}.spec.ts,${capture}.spec-d.ts,${capture}.spec.tsx,${capture}.spec-d.tsx,${capture}.options.ts,${capture}.test.ts,${capture}.test-d.ts,${capture}.test.tsx,${capture}.test-d.tsx,${capture}.stories.ts,${capture}.stories.tsx,${capture}.mdx",
+        "*.tsx": "${capture}.jsx,${capture}.spec.tsx,${capture}.spec-d.tsx,${capture}.test.tsx,${capture}.test-d.tsx,${capture}.stories.tsx,${capture}.stories.ts,${capture}.mdx",
+        "package.json": "package-lock.json,yarn.lock,pnpm-lock.yaml",
+        "tsconfig.json": "tsconfig.*.json,tsconfig.tsbuildinfo"
+    },
+    "files.associations": {
+        ".dev.vars": "dotenv",
+        ".dev.vars.*": "dotenv",
+        ".env": "dotenv",
+        ".env.*": "dotenv",
+        "*.css": "tailwindcss"
+    },
+    "files.eol": "\n",
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/.turbo/**": true,
+        "**/node_modules/*/**": true
+    },
+    "js/ts.tsdk.path": "node_modules/typescript/lib",
+    "oxc.fmt.configPath": "${workspaceFolder}/.oxfmtrc.json",
+    "oxc.path.oxfmt": "${workspaceFolder}/node_modules/oxfmt/bin/oxfmt",
+    "oxc.useExecPath": true
+}
