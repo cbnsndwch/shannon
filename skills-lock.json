@@ -1,17 +1,17 @@
 {
-  "version": 1,
-  "skills": {
-    "do-commits": {
-      "source": "cbnsndwch/skills",
-      "sourceType": "github",
-      "skillPath": "do-commits/SKILL.md",
-      "computedHash": "0dee47171970908145426fa64f0c66019a8e0c5e224149f5b40df06bddb86229"
-    },
-    "ncu": {
-      "source": "cbnsndwch/skills",
-      "sourceType": "github",
-      "skillPath": "ncu/SKILL.md",
-      "computedHash": "ad08593f337cdec0d25329b347005272acee956e44fbaec7c7a66db71270a36c"
+    "version": 1,
+    "skills": {
+        "do-commits": {
+            "source": "cbnsndwch/skills",
+            "sourceType": "github",
+            "skillPath": "do-commits/SKILL.md",
+            "computedHash": "0dee47171970908145426fa64f0c66019a8e0c5e224149f5b40df06bddb86229"
+        },
+        "ncu": {
+            "source": "cbnsndwch/skills",
+            "sourceType": "github",
+            "skillPath": "ncu/SKILL.md",
+            "computedHash": "ad08593f337cdec0d25329b347005272acee956e44fbaec7c7a66db71270a36c"
+        }
     }
-  }
 }

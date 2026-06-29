@@ -14,11 +14,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: 
+        os:
           - ubuntu-latest
           - windows-latest
           - macos-latest
-        node: 
+        node:
           - 22
           - 24
           - 26

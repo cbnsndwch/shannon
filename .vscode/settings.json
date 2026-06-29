@@ -13,9 +13,7 @@
     },
     "editor.defaultFormatter": "oxc.oxc-vscode",
     "editor.formatOnSave": true,
-    "editor.rulers": [
-        80
-    ],
+    "editor.rulers": [80],
     "explorer.fileNesting.enabled": true,
     "explorer.fileNesting.patterns": {
         ".dev.vars": ".dev.vars.*",

@@ -22,7 +22,7 @@ export function listProfiles(env: NodeJS.ProcessEnv = process.env): string[] {
     return readdirSync(dir, { withFileTypes: true })
         .filter(entry => entry.isDirectory())
         .map(entry => entry.name)
-        .sort();
+        .toSorted();
 }
 
 export function profileExists(

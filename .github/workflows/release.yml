@@ -70,16 +70,16 @@ jobs:
         include:
           - os: ubuntu-latest
             target: linux-x64
-            ext: '' 
+            ext: ''
           - os: ubuntu-24.04-arm
             target: linux-arm64
-            ext: '' 
+            ext: ''
           - os: macos-latest
             target: macos-x64
-            ext: ''  # Intel
+            ext: '' # Intel
           - os: macos-latest
             target: macos-arm64
-            ext: ''  # Apple Silicon
+            ext: '' # Apple Silicon
           - os: windows-latest
             target: win-x64
             ext: '.exe'
