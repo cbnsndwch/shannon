@@ -1,105 +1,138 @@
-import { createInterface } from "node:readline/promises";
+import { createInterface } from 'node:readline/promises';
 import {
-  clearDefault,
-  copyProfile,
-  createProfile,
-  deleteProfile,
-  getDefault,
-  listProfiles,
-  profileExists,
-  resolveActive,
-  setDefault,
-} from "./core/profiles.js";
-import { profileDir } from "./core/paths.js";
-import { assertValidName } from "./core/validate.js";
-import { resolveAuto } from "./core/autodir.js";
-import { ShannonError } from "./core/errors.js";
-import { launchClaude } from "./launch.js";
+    clearDefault,
+    copyProfile,
+    createProfile,
+    deleteProfile,
+    getDefault,
+    listProfiles,
+    profileExists,
+    resolveActive,
+    setDefault
+} from './core/profiles.js';
+import { profileDir } from './core/paths.js';
+import { assertValidName } from './core/validate.js';
+import { resolveAuto } from './core/autodir.js';
+import { ShannonError } from './core/errors.js';
+import { launchClaude } from './launch.js';
 
 // Single-sourced against package.json by test/version.test.ts, so a release
 // bump cannot ship a stale self-reported version on npm or the SEA binaries.
-export const VERSION = "0.1.0";
+export const VERSION = '0.1.0';
 
 /** First tokens that mean "manage profiles" rather than "launch claude". */
 const MANAGEMENT = new Set<string>([
-  "create", "list", "ls", "default", "which", "delete", "rm",
-  "use", "clone", "status", "st", "init", "help", "-h", "--help", "--version",
-  // Internal: invoked by the `shannon init` shell hooks, not by users.
-  "__auto",
+    'create',
+    'list',
+    'ls',
+    'default',
+    'which',
+    'delete',
+    'rm',
+    'use',
+    'clone',
+    'status',
+    'st',
+    'init',
+    'help',
+    '-h',
+    '--help',
+    '--version',
+    // Internal: invoked by the `shannon init` shell hooks, not by users.
+    '__auto'
 ]);
 
 export async function dispatch(argv: string[]): Promise<number> {
-  const cmd = argv[0];
+    const cmd = argv[0];
 
-  // Launch semantics: a bare `shannon`, an explicit `run`/`--`, or any token
-  // that isn't one of our subcommands is passed straight through to claude.
-  if (cmd === undefined) return safe(() => launchClaude([]));
-  if (cmd === "run") return safe(() => launchClaude(argv.slice(1)));
-  if (cmd === "--") return safe(() => launchClaude(argv.slice(1)));
-  if (!MANAGEMENT.has(cmd)) return safe(() => launchClaude(argv));
+    // Launch semantics: a bare `shannon`, an explicit `run`/`--`, or any token
+    // that isn't one of our subcommands is passed straight through to claude.
+    if (cmd === undefined) return safe(() => launchClaude([]));
+    if (cmd === 'run') return safe(() => launchClaude(argv.slice(1)));
+    if (cmd === '--') return safe(() => launchClaude(argv.slice(1)));
+    if (!MANAGEMENT.has(cmd)) return safe(() => launchClaude(argv));
 
-  return safe(async () => {
-    switch (cmd) {
-      case "create": return cmdCreate(argv.slice(1));
-      case "list":
-      case "ls": return cmdList();
-      case "default": return cmdDefault(argv.slice(1));
-      case "which": return cmdWhich(argv.slice(1));
-      case "delete":
-      case "rm": return cmdDelete(argv.slice(1));
-      case "use": return cmdUse(argv.slice(1));
-      case "clone": return cmdClone(argv.slice(1));
-      case "status":
-      case "st": return cmdStatus();
-      case "init": return cmdInit(argv.slice(1));
-      case "__auto": return cmdAuto(argv.slice(1));
-      case "help":
-      case "-h":
-      case "--help": return printHelp();
-      case "--version": return printVersion();
-      default: return printHelp();
-    }
-  });
+    return safe(async () => {
+        switch (cmd) {
+            case 'create':
+                return cmdCreate(argv.slice(1));
+            case 'list':
+            case 'ls':
+                return cmdList();
+            case 'default':
+                return cmdDefault(argv.slice(1));
+            case 'which':
+                return cmdWhich(argv.slice(1));
+            case 'delete':
+            case 'rm':
+                return cmdDelete(argv.slice(1));
+            case 'use':
+                return cmdUse(argv.slice(1));
+            case 'clone':
+                return cmdClone(argv.slice(1));
+            case 'status':
+            case 'st':
+                return cmdStatus();
+            case 'init':
+                return cmdInit(argv.slice(1));
+            case '__auto':
+                return cmdAuto(argv.slice(1));
+            case 'help':
+            case '-h':
+            case '--help':
+                return printHelp();
+            case '--version':
+                return printVersion();
+            default:
+                return printHelp();
+        }
+    });
 }
 
 async function safe(fn: () => number | Promise<number>): Promise<number> {
-  try {
-    return await fn();
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    process.stderr.write(`shannon: ${msg}\n`);
-    return 1;
-  }
+    try {
+        return await fn();
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        process.stderr.write(`shannon: ${msg}\n`);
+        return 1;
+    }
 }
 
 function cmdCreate(args: string[]): number {
-  const { name, from, withCredentials, hasFrom } = parseCreate(args);
-  if (!name) {
-    throw new ShannonError("usage: shannon create <name> [--from <src> [--with-credentials]]");
-  }
-
-  // `create --from <src>` copies an existing profile, exactly like `clone`
-  // (same shared copy routine, same credential handling and error messages).
-  if (hasFrom) {
-    if (!from) {
-      throw new ShannonError("usage: shannon create <name> --from <src> [--with-credentials]");
+    const { name, from, withCredentials, hasFrom } = parseCreate(args);
+    if (!name) {
+        throw new ShannonError(
+            'usage: shannon create <name> [--from <src> [--with-credentials]]'
+        );
     }
-    const dir = copyProfile(from, name, { withCredentials });
-    process.stdout.write(`Created profile: ${name} (from '${from}')\n`);
-    printCopyResult(dir, withCredentials);
+
+    // `create --from <src>` copies an existing profile, exactly like `clone`
+    // (same shared copy routine, same credential handling and error messages).
+    if (hasFrom) {
+        if (!from) {
+            throw new ShannonError(
+                'usage: shannon create <name> --from <src> [--with-credentials]'
+            );
+        }
+        const dir = copyProfile(from, name, { withCredentials });
+        process.stdout.write(`Created profile: ${name} (from '${from}')\n`);
+        printCopyResult(dir, withCredentials);
+        return 0;
+    }
+
+    // The credentials flag only makes sense when copying a source profile; reject
+    // it on a fresh create rather than silently ignoring it.
+    if (withCredentials) {
+        throw new ShannonError(
+            "--with-credentials only applies to 'create --from <src>'"
+        );
+    }
+
+    const dir = createProfile(name);
+    process.stdout.write(`Created profile: ${name}\n`);
+    process.stdout.write(`Config directory: ${dir}\n`);
     return 0;
-  }
-
-  // The credentials flag only makes sense when copying a source profile; reject
-  // it on a fresh create rather than silently ignoring it.
-  if (withCredentials) {
-    throw new ShannonError("--with-credentials only applies to 'create --from <src>'");
-  }
-
-  const dir = createProfile(name);
-  process.stdout.write(`Created profile: ${name}\n`);
-  process.stdout.write(`Config directory: ${dir}\n`);
-  return 0;
 }
 
 /**
@@ -108,12 +141,12 @@ function cmdCreate(args: string[]): number {
  * they were omitted.
  */
 function printCopyResult(dir: string, withCredentials: boolean): void {
-  process.stdout.write(`Config directory: ${dir}\n`);
-  if (!withCredentials) {
-    process.stdout.write(
-      "(credentials omitted — sign in under the new profile, or re-run with --with-credentials)\n",
-    );
-  }
+    process.stdout.write(`Config directory: ${dir}\n`);
+    if (!withCredentials) {
+        process.stdout.write(
+            '(credentials omitted — sign in under the new profile, or re-run with --with-credentials)\n'
+        );
+    }
 }
 
 /**
@@ -127,154 +160,174 @@ function printCopyResult(dir: string, withCredentials: boolean): void {
  * `-`-prefixed name fails loudly instead of producing a blank profile.
  */
 function parseCreate(args: string[]): {
-  name: string | null;
-  from: string | null;
-  withCredentials: boolean;
-  hasFrom: boolean;
+    name: string | null;
+    from: string | null;
+    withCredentials: boolean;
+    hasFrom: boolean;
 } {
-  let name: string | null = null;
-  let from: string | null = null;
-  let withCredentials = false;
-  let hasFrom = false;
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i]!;
-    if (a === "--from" || a.startsWith("--from=")) {
-      hasFrom = true;
-      if (a.startsWith("--from=")) {
-        from = a.slice("--from=".length) || null;
-      } else {
-        const next = args[i + 1];
-        if (next !== undefined && !next.startsWith("-")) {
-          from = next;
-          i++;
+    let name: string | null = null;
+    let from: string | null = null;
+    let withCredentials = false;
+    let hasFrom = false;
+    for (let i = 0; i < args.length; i++) {
+        const a = args[i]!;
+        if (a === '--from' || a.startsWith('--from=')) {
+            hasFrom = true;
+            if (a.startsWith('--from=')) {
+                from = a.slice('--from='.length) || null;
+            } else {
+                const next = args[i + 1];
+                if (next !== undefined && !next.startsWith('-')) {
+                    from = next;
+                    i++;
+                }
+            }
+            continue;
         }
-      }
-      continue;
+        if (a === '--with-credentials') {
+            withCredentials = true;
+            continue;
+        }
+        if (a.startsWith('-')) {
+            throw new ShannonError(`unknown option '${a}' for create`);
+        }
+        if (name === null) {
+            name = a;
+        }
     }
-    if (a === "--with-credentials") {
-      withCredentials = true;
-      continue;
-    }
-    if (a.startsWith("-")) {
-      throw new ShannonError(`unknown option '${a}' for create`);
-    }
-    if (name === null) {
-      name = a;
-    }
-  }
-  return { name, from, withCredentials, hasFrom };
+    return { name, from, withCredentials, hasFrom };
 }
 
 function cmdList(): number {
-  const names = listProfiles();
-  if (names.length === 0) {
-    process.stdout.write("No profiles found. Create one with: shannon create <name>\n");
+    const names = listProfiles();
+    if (names.length === 0) {
+        process.stdout.write(
+            'No profiles found. Create one with: shannon create <name>\n'
+        );
+        return 0;
+    }
+    const def = getDefault();
+    const active = resolveActive().name;
+    for (const name of names) {
+        const isDefault = name === def;
+        const isActive = name === active;
+        let prefix = '  ';
+        if (isDefault && isActive) prefix = '>*';
+        else if (isDefault) prefix = ' *';
+        else if (isActive) prefix = '> ';
+        let tag = '';
+        if (isDefault && isActive) tag = ' (default, active)';
+        else if (isDefault) tag = ' (default)';
+        else if (isActive) tag = ' (active)';
+        process.stdout.write(`${prefix} ${name}${tag}\n`);
+    }
     return 0;
-  }
-  const def = getDefault();
-  const active = resolveActive().name;
-  for (const name of names) {
-    const isDefault = name === def;
-    const isActive = name === active;
-    let prefix = "  ";
-    if (isDefault && isActive) prefix = ">*";
-    else if (isDefault) prefix = " *";
-    else if (isActive) prefix = "> ";
-    let tag = "";
-    if (isDefault && isActive) tag = " (default, active)";
-    else if (isDefault) tag = " (default)";
-    else if (isActive) tag = " (active)";
-    process.stdout.write(`${prefix} ${name}${tag}\n`);
-  }
-  return 0;
 }
 
 function cmdDefault(args: string[]): number {
-  const name = args[0];
-  if (!name) {
-    const def = getDefault();
-    if (!def) {
-      throw new ShannonError("no default profile set. Set one with: shannon default <name>");
+    const name = args[0];
+    if (!name) {
+        const def = getDefault();
+        if (!def) {
+            throw new ShannonError(
+                'no default profile set. Set one with: shannon default <name>'
+            );
+        }
+        process.stdout.write(`${def}\n`);
+        return 0;
     }
-    process.stdout.write(`${def}\n`);
+    setDefault(name);
+    process.stdout.write(`Default profile set to: ${name}\n`);
     return 0;
-  }
-  setDefault(name);
-  process.stdout.write(`Default profile set to: ${name}\n`);
-  return 0;
 }
 
 function cmdWhich(args: string[]): number {
-  const name = args[0];
-  if (name) {
-    assertValidName(name);
-    if (!profileExists(name)) {
-      throw new ShannonError(`profile '${name}' does not exist. Create it with: shannon create ${name}`);
+    const name = args[0];
+    if (name) {
+        assertValidName(name);
+        if (!profileExists(name)) {
+            throw new ShannonError(
+                `profile '${name}' does not exist. Create it with: shannon create ${name}`
+            );
+        }
+        process.stdout.write(`${profileDir(name)}\n`);
+        return 0;
     }
-    process.stdout.write(`${profileDir(name)}\n`);
+    const def = getDefault();
+    if (!def) {
+        throw new ShannonError(
+            'no default profile set. Use: shannon default <name>'
+        );
+    }
+    assertValidName(def);
+    if (!profileExists(def)) {
+        throw new ShannonError(`default profile '${def}' does not exist`);
+    }
+    process.stdout.write(`${profileDir(def)}\n`);
     return 0;
-  }
-  const def = getDefault();
-  if (!def) {
-    throw new ShannonError("no default profile set. Use: shannon default <name>");
-  }
-  assertValidName(def);
-  if (!profileExists(def)) {
-    throw new ShannonError(`default profile '${def}' does not exist`);
-  }
-  process.stdout.write(`${profileDir(def)}\n`);
-  return 0;
 }
 
 async function cmdDelete(args: string[]): Promise<number> {
-  const name = args[0];
-  if (!name) {
-    throw new ShannonError("usage: shannon delete <name>");
-  }
-  assertValidName(name);
-  if (!profileExists(name)) {
-    throw new ShannonError(`profile '${name}' does not exist`);
-  }
-  const force = args.includes("--yes") || args.includes("-y") || args.includes("--force");
-  if (!force && !(await confirm(`Delete profile "${name}" and all its data? [y/N] `))) {
-    process.stdout.write("Cancelled.\n");
+    const name = args[0];
+    if (!name) {
+        throw new ShannonError('usage: shannon delete <name>');
+    }
+    assertValidName(name);
+    if (!profileExists(name)) {
+        throw new ShannonError(`profile '${name}' does not exist`);
+    }
+    const force =
+        args.includes('--yes') ||
+        args.includes('-y') ||
+        args.includes('--force');
+    if (
+        !force &&
+        !(await confirm(`Delete profile "${name}" and all its data? [y/N] `))
+    ) {
+        process.stdout.write('Cancelled.\n');
+        return 0;
+    }
+    deleteProfile(name);
+    process.stdout.write(`Deleted profile: ${name}\n`);
+    if (getDefault() === name) {
+        clearDefault();
+        process.stdout.write(`Cleared default profile (was "${name}")\n`);
+    }
     return 0;
-  }
-  deleteProfile(name);
-  process.stdout.write(`Deleted profile: ${name}\n`);
-  if (getDefault() === name) {
-    clearDefault();
-    process.stdout.write(`Cleared default profile (was "${name}")\n`);
-  }
-  return 0;
 }
 
 function cmdUse(args: string[]): number {
-  const { name, emit } = parseUse(args);
-  if (!name) {
-    throw new ShannonError("usage: shannon use <name>");
-  }
-  assertValidName(name);
-  if (!profileExists(name)) {
-    throw new ShannonError(`profile '${name}' does not exist. Create it with: shannon create ${name}`);
-  }
-  const dir = profileDir(name);
+    const { name, emit } = parseUse(args);
+    if (!name) {
+        throw new ShannonError('usage: shannon use <name>');
+    }
+    assertValidName(name);
+    if (!profileExists(name)) {
+        throw new ShannonError(
+            `profile '${name}' does not exist. Create it with: shannon create ${name}`
+        );
+    }
+    const dir = profileDir(name);
 
-  // Used by the `shannon init` shell functions: emit just the raw export line
-  // (on stdout, to be eval'd) and a confirmation (on stderr, for the human).
-  if (emit) {
-    process.stdout.write(exportLine(emit, "CLAUDE_CONFIG_DIR", dir) + "\n");
-    process.stderr.write(`Switched to profile: ${name}\n`);
+    // Used by the `shannon init` shell functions: emit just the raw export line
+    // (on stdout, to be eval'd) and a confirmation (on stderr, for the human).
+    if (emit) {
+        process.stdout.write(exportLine(emit, 'CLAUDE_CONFIG_DIR', dir) + '\n');
+        process.stderr.write(`Switched to profile: ${name}\n`);
+        return 0;
+    }
+
+    // Standalone: a child process cannot mutate the parent shell, so show how.
+    process.stderr.write(
+        `Profile '${name}' resolved. For seamless 'use', run 'shannon init <shell>' (see help); until then activate it with:\n`
+    );
+    process.stdout.write(
+        `${exportLine('posix', 'CLAUDE_CONFIG_DIR', dir)}      # bash / zsh\n`
+    );
+    process.stdout.write(
+        `${exportLine('pwsh', 'CLAUDE_CONFIG_DIR', dir)}   # PowerShell\n`
+    );
     return 0;
-  }
-
-  // Standalone: a child process cannot mutate the parent shell, so show how.
-  process.stderr.write(
-    `Profile '${name}' resolved. For seamless 'use', run 'shannon init <shell>' (see help); until then activate it with:\n`,
-  );
-  process.stdout.write(`${exportLine("posix", "CLAUDE_CONFIG_DIR", dir)}      # bash / zsh\n`);
-  process.stdout.write(`${exportLine("pwsh", "CLAUDE_CONFIG_DIR", dir)}   # PowerShell\n`);
-  return 0;
 }
 
 /**
@@ -283,66 +336,77 @@ function cmdUse(args: string[]): number {
  * keeps it from being mistaken for the profile name (the shell wrappers always
  * append `--emit <shell>`, even to a bare `shannon use`).
  */
-function parseUse(args: string[]): { name: string | null; emit: string | null } {
-  let name: string | null = null;
-  let emit: string | null = null;
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i]!;
-    if (a === "--emit") {
-      emit = args[i + 1] ?? null;
-      i++;
-      continue;
+function parseUse(args: string[]): {
+    name: string | null;
+    emit: string | null;
+} {
+    let name: string | null = null;
+    let emit: string | null = null;
+    for (let i = 0; i < args.length; i++) {
+        const a = args[i]!;
+        if (a === '--emit') {
+            emit = args[i + 1] ?? null;
+            i++;
+            continue;
+        }
+        if (a.startsWith('-')) {
+            continue;
+        }
+        if (name === null) {
+            name = a;
+        }
     }
-    if (a.startsWith("-")) {
-      continue;
-    }
-    if (name === null) {
-      name = a;
-    }
-  }
-  return { name, emit };
+    return { name, emit };
 }
 
 function cmdClone(args: string[]): number {
-  const positional = args.filter((a) => !a.startsWith("-"));
-  const src = positional[0];
-  const dst = positional[1];
-  if (!src || !dst) {
-    throw new ShannonError("usage: shannon clone <source> <dest> [--with-credentials]");
-  }
-  const withCredentials = args.includes("--with-credentials");
-  const dir = copyProfile(src, dst, { withCredentials });
-  process.stdout.write(`Cloned '${src}' -> '${dst}'\n`);
-  printCopyResult(dir, withCredentials);
-  return 0;
+    const positional = args.filter(a => !a.startsWith('-'));
+    const src = positional[0];
+    const dst = positional[1];
+    if (!src || !dst) {
+        throw new ShannonError(
+            'usage: shannon clone <source> <dest> [--with-credentials]'
+        );
+    }
+    const withCredentials = args.includes('--with-credentials');
+    const dir = copyProfile(src, dst, { withCredentials });
+    process.stdout.write(`Cloned '${src}' -> '${dst}'\n`);
+    printCopyResult(dir, withCredentials);
+    return 0;
 }
 
 function cmdStatus(): number {
-  const resolved = resolveActive();
-  if (resolved.name) {
-    process.stdout.write(`Active profile: ${resolved.name}\n`);
-    process.stdout.write(`Config directory: ${resolved.dir}\n`);
-  } else if (resolved.dir) {
-    process.stdout.write(`Active config directory: ${resolved.dir} (not a managed profile)\n`);
-  } else {
-    process.stdout.write("No active profile\n");
-  }
-  const def = getDefault();
-  process.stdout.write(def ? `Default profile: ${def}\n` : "No default profile set\n");
-  return 0;
+    const resolved = resolveActive();
+    if (resolved.name) {
+        process.stdout.write(`Active profile: ${resolved.name}\n`);
+        process.stdout.write(`Config directory: ${resolved.dir}\n`);
+    } else if (resolved.dir) {
+        process.stdout.write(
+            `Active config directory: ${resolved.dir} (not a managed profile)\n`
+        );
+    } else {
+        process.stdout.write('No active profile\n');
+    }
+    const def = getDefault();
+    process.stdout.write(
+        def ? `Default profile: ${def}\n` : 'No default profile set\n'
+    );
+    return 0;
 }
 
 function cmdInit(args: string[]): number {
-  const shell = args[0];
-  if (!shell) {
-    throw new ShannonError("usage: shannon init <bash|zsh|fish|pwsh>");
-  }
-  const snippet = INIT_SNIPPETS[shell];
-  if (!snippet) {
-    throw new ShannonError(`unsupported shell '${shell}'. Supported: bash, zsh, fish, pwsh`);
-  }
-  process.stdout.write(snippet);
-  return 0;
+    const shell = args[0];
+    if (!shell) {
+        throw new ShannonError('usage: shannon init <bash|zsh|fish|pwsh>');
+    }
+    const snippet = INIT_SNIPPETS[shell];
+    if (!snippet) {
+        throw new ShannonError(
+            `unsupported shell '${shell}'. Supported: bash, zsh, fish, pwsh`
+        );
+    }
+    process.stdout.write(snippet);
+    return 0;
 }
 
 /**
@@ -353,71 +417,78 @@ function cmdInit(args: string[]): number {
  * reflected in the spawned process's cwd.
  */
 function cmdAuto(args: string[]): number {
-  const shell = args[0] ?? "posix";
-  const cwd = args[1] ?? process.cwd();
-  const action = resolveAuto(cwd);
-  if (action.kind === "set") {
-    process.stdout.write(exportLine(shell, "CLAUDE_CONFIG_DIR", action.dir) + "\n");
-    process.stdout.write(exportLine(shell, "SHANNON_AUTO", action.name) + "\n");
-  } else if (action.kind === "unset") {
-    process.stdout.write(unsetLine(shell, "CLAUDE_CONFIG_DIR") + "\n");
-    process.stdout.write(unsetLine(shell, "SHANNON_AUTO") + "\n");
-  }
-  return 0;
+    const shell = args[0] ?? 'posix';
+    const cwd = args[1] ?? process.cwd();
+    const action = resolveAuto(cwd);
+    if (action.kind === 'set') {
+        process.stdout.write(
+            exportLine(shell, 'CLAUDE_CONFIG_DIR', action.dir) + '\n'
+        );
+        process.stdout.write(
+            exportLine(shell, 'SHANNON_AUTO', action.name) + '\n'
+        );
+    } else if (action.kind === 'unset') {
+        process.stdout.write(unsetLine(shell, 'CLAUDE_CONFIG_DIR') + '\n');
+        process.stdout.write(unsetLine(shell, 'SHANNON_AUTO') + '\n');
+    }
+    return 0;
 }
 
 function printVersion(): number {
-  process.stdout.write(`${VERSION}\n`);
-  return 0;
+    process.stdout.write(`${VERSION}\n`);
+    return 0;
 }
 
 function printHelp(): number {
-  process.stdout.write(HELP);
-  return 0;
+    process.stdout.write(HELP);
+    return 0;
 }
 
 // --- helpers ---
 
 function posixQuote(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`;
+    return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
 function pwshQuote(s: string): string {
-  return `'${s.replace(/'/g, "''")}'`;
+    return `'${s.replace(/'/g, "''")}'`;
 }
 
 function exportLine(shell: string, key: string, value: string): string {
-  switch (shell) {
-    case "pwsh":
-    case "powershell":
-      return `$env:${key} = ${pwshQuote(value)}`;
-    case "fish":
-      return `set -gx ${key} ${posixQuote(value)}`;
-    default:
-      return `export ${key}=${posixQuote(value)}`;
-  }
+    switch (shell) {
+        case 'pwsh':
+        case 'powershell':
+            return `$env:${key} = ${pwshQuote(value)}`;
+        case 'fish':
+            return `set -gx ${key} ${posixQuote(value)}`;
+        default:
+            return `export ${key}=${posixQuote(value)}`;
+    }
 }
 
 function unsetLine(shell: string, key: string): string {
-  switch (shell) {
-    case "pwsh":
-    case "powershell":
-      return `Remove-Item "Env:${key}" -ErrorAction SilentlyContinue`;
-    case "fish":
-      return `set -e ${key}`;
-    default:
-      return `unset ${key}`;
-  }
+    switch (shell) {
+        case 'pwsh':
+        case 'powershell':
+            return `Remove-Item "Env:${key}" -ErrorAction SilentlyContinue`;
+        case 'fish':
+            return `set -e ${key}`;
+        default:
+            return `unset ${key}`;
+    }
 }
 
 async function confirm(prompt: string): Promise<boolean> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  try {
-    const answer = (await rl.question(prompt)).trim();
-    return /^y(es)?$/i.test(answer);
-  } finally {
-    rl.close();
-  }
+    const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+    try {
+        const answer = (await rl.question(prompt)).trim();
+        return /^y(es)?$/i.test(answer);
+    } finally {
+        rl.close();
+    }
 }
 
 // --- shell integration snippets (emitted by `shannon init <shell>`) ---
@@ -537,11 +608,11 @@ function prompt {
 `;
 
 const INIT_SNIPPETS: Record<string, string> = {
-  bash: BASH_INIT,
-  zsh: ZSH_INIT,
-  fish: FISH_INIT,
-  pwsh: PWSH_INIT,
-  powershell: PWSH_INIT,
+    bash: BASH_INIT,
+    zsh: ZSH_INIT,
+    fish: FISH_INIT,
+    pwsh: PWSH_INIT,
+    powershell: PWSH_INIT
 };
 
 const HELP = `shannon — manage isolated Claude Code configuration profiles

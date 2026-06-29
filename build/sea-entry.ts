@@ -13,14 +13,14 @@
 //      SEA builds omit the duplicate (["app", "a", "b"] — user args at index 1).
 //      The check below covers all three so the same bundle behaves correctly
 //      however it is launched.
-import { isSea } from "node:sea";
-import { dispatch } from "../src/commands.js";
+import { isSea } from 'node:sea';
+import { dispatch } from '../src/commands.js';
 
 const start = isSea() && process.argv[1] !== process.execPath ? 1 : 2;
 const args = process.argv.slice(start);
 
 // `dispatch` resolves to a numeric exit code and never rejects (it wraps every
 // handler in an internal try/catch), so no `.catch` is needed here.
-dispatch(args).then((code) => {
-  process.exitCode = code;
+dispatch(args).then(code => {
+    process.exitCode = code;
 });

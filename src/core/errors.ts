@@ -4,8 +4,8 @@
  * without a stack trace. Anything else bubbles up as an unexpected crash.
  */
 export class ShannonError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ShannonError";
-  }
+    constructor(message: string) {
+        super(message);
+        this.name = 'ShannonError';
+    }
 }

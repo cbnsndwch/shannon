@@ -1,7 +1,7 @@
 {
-  "main": "build/sea-bundle.cjs",
-  "output": "build/sea-prep.blob",
-  "disableExperimentalSEAWarning": true,
-  "useSnapshot": false,
-  "useCodeCache": false
+    "main": "build/sea-bundle.cjs",
+    "output": "build/sea-prep.blob",
+    "disableExperimentalSEAWarning": true,
+    "useSnapshot": false,
+    "useCodeCache": false
 }
