@@ -11,7 +11,7 @@
     "arrowParens": "avoid",
     "overrides": [
         {
-            "files": ["*.puml", "*.yml"],
+            "files": ["*.puml", "*.yml", "*.yaml"],
             "options": {
                 "tabWidth": 2
             }

@@ -1,6 +1,2 @@
-# esbuild ships its compiler as a prebuilt, platform-specific binary (installed
-# as an optional dependency) and resolves it at runtime, so its install script
-# is not needed here. It is listed as intentionally not built, keeping with the
-# project's "nothing fetched-and-executed at install time" stance.
-ignoredBuiltDependencies:
-    - esbuild
+allowBuilds:
+  esbuild: true
