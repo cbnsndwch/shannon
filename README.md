@@ -157,7 +157,7 @@ Leaving the directory reverts to the default profile. A manual `shannon use` ove
 
 - **`CLAUDE_CONFIG_DIR`** — the variable Claude Code reads to find its config directory; setting it is how Shannon selects a profile. An explicit value in your environment **overrides the default profile** for that session, and that is what `status` and `list` report as *active*. `shannon use` (with shell integration) sets it for you.
 - **`SHANNON_AUTO`** — internal state managed by the shell hooks to track which profile was auto-selected from a `.shannon` file. You don't set this yourself.
-- **`SHANNON_BANNER`** — controls the portrait banner shown above `status` and `help`. By default Shannon auto-detects whether your terminal supports Unicode and falls back to an ASCII rendering otherwise; set `SHANNON_BANNER=ascii` or `SHANNON_BANNER=unicode` to force one.
+- **`SHANNON_BANNER`** — controls the portrait banner shown above `status` and `help` (only when stdout is a terminal — it's suppressed for pipes, scripts, and the shell-integration wrappers). By default Shannon auto-detects whether your terminal supports Unicode and falls back to an ASCII rendering otherwise; set `SHANNON_BANNER=ascii` or `SHANNON_BANNER=unicode` to force one.
 - **`SHANNON_NO_UPDATE_CHECK`** — set to any value to disable the update check. Shannon otherwise checks the npm registry at most once a day (in a detached background process, never blocking a command) and appends a one-line notice when a newer release exists; the check sends no identifying data. `NO_UPDATE_NOTIFIER` and `CI` are also honored, and the notice is suppressed when output isn't a terminal.
 
 ## Profiles

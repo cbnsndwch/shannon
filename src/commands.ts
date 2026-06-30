@@ -427,7 +427,7 @@ function cmdClone(args: string[]): number {
 }
 
 function cmdStatus(): number {
-    process.stdout.write(banner() + '\n');
+    printBanner();
     const resolved = resolveActive();
     if (resolved.name) {
         process.stdout.write(`Active profile: ${resolved.name}\n`);
@@ -543,9 +543,20 @@ function upgradeHint(): string {
 }
 
 function printHelp(): number {
-    process.stdout.write(banner() + '\n');
+    printBanner();
     process.stdout.write(HELP);
     return 0;
+}
+
+/**
+ * Write the portrait banner — but only for a real interactive user. When stdout
+ * is captured (a pipe, a script, or the shell-integration wrappers that eval
+ * Shannon's output), the portrait would be noise or corrupt the consumed text,
+ * so it is suppressed there.
+ */
+function printBanner(): void {
+    if (!process.stdout.isTTY) return;
+    process.stdout.write(banner() + '\n');
 }
 
 // --- helpers ---
