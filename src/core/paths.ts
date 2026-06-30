@@ -27,6 +27,15 @@ export function defaultFile(env: NodeJS.ProcessEnv = process.env): string {
     return join(dataDir(env), '.default');
 }
 
+/**
+ * Path to the update-check cache (JSON: `{ checkedAt, latest }`). Lives in the
+ * data dir alongside `.default`; the leading dot keeps it out of `list`, which
+ * only surfaces real profile directories.
+ */
+export function updateCacheFile(env: NodeJS.ProcessEnv = process.env): string {
+    return join(dataDir(env), '.update-check');
+}
+
 /** Path to a named profile's config directory. */
 export function profileDir(
     name: string,

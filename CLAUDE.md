@@ -53,7 +53,7 @@ Profile names must match `[A-Za-z0-9_-]+` (reject empty, leading `.`, `..`, `/`,
 
 ## Command interface
 
-`create <name> [--from <src>] [--with-credentials]`, `list`/`ls`, `default [name]`, `which [name]`, `use <name>`, `clone <src> <dst> [--with-credentials]`, `delete`/`rm <name> [--yes]`, `status`/`st`, `init <shell>`, `help`, `--version`. Bare `shannon` (no args) prints profile status and never launches `claude` implicitly. `shannon run …`, `shannon -- …`, or any non-subcommand token launches `claude` with the active profile. `create --from <src>` copies an existing profile (same shared copy routine as `clone`); both omit `.credentials.json` unless `--with-credentials` is passed.
+`create <name> [--from <src>] [--with-credentials]`, `list`/`ls`, `default [name]`, `which [name]`, `use <name>`, `clone <src> <dst> [--with-credentials]`, `delete`/`rm <name> [--yes]`, `status`/`st`, `init <shell>`, `update`/`upgrade`, `help`, `--version`. Bare `shannon` (no args) prints profile status and never launches `claude` implicitly. `shannon run …`, `shannon -- …`, or any non-subcommand token launches `claude` with the active profile. `create --from <src>` copies an existing profile (same shared copy routine as `clone`); both omit `.credentials.json` unless `--with-credentials` is passed.
 
 ## Design constraints (do not violate)
 
@@ -63,7 +63,7 @@ Profile names must match `[A-Za-z0-9_-]+` (reject empty, leading `.`, `..`, `/`,
 4. Keep **"Claude" out of the package name/branding**; keep the "not affiliated with Anthropic" disclaimer.
 5. **Storage stays byte-compatible** with the shell tool.
 6. **Distribution**: publish to npm (`pnpm publish`) **and** ship prebuilt single-file binaries via GitHub Releases.
-7. **No analytics / SEO cruft.**
+7. **No analytics / SEO cruft / telemetry.** The lone sanctioned network call is the npm-registry update check (`src/core/updates.ts`): a single GET for the `latest` version, no identifying data, cached ≤24h, opt-out via `SHANNON_NO_UPDATE_CHECK`/`NO_UPDATE_NOTIFIER`/`CI`, and never on the launch hot path. Anything beyond that is out of bounds.
 
 ## Roadmap
 
@@ -72,6 +72,7 @@ Profile names must match `[A-Za-z0-9_-]+` (reject empty, leading `.`, `..`, `/`,
 - **M3 (done)** — `create <name> --from <src> [--with-credentials]`: create a profile by copying an existing one, sharing the single `copyProfile` routine behind `clone` (credentials omitted unless `--with-credentials`).
 - **M4 (done)** — release CI: `.github/workflows/ci.yml` (build+test matrix) and `release.yml` (tag-triggered). On a `v*` tag it verifies the tag matches `package.json`, builds Node SEA single-file binaries for linux/macOS/Windows (esbuild bundles `build/sea-entry.ts` → CJS, `postject` injects the blob) uploaded to a GitHub Release via the `gh` CLI, then publishes to npm with provenance (`pnpm publish --provenance`, `id-token: write`, `NPM_TOKEN`). Every action is pinned by commit SHA; pnpm comes from corepack; build-only devDeps (`esbuild`, `postject`) are exact-pinned and runtime deps stay zero. See `RELEASING.md`.
 - **M5 (done)** — docs polish (no analytics): self-contained README with a quickstart, a complete command reference matching the CLI help, shell-integration / per-directory `.shannon` docs, an environment-variable note, a troubleshooting/FAQ, and a short `CONTRIBUTING.md` + `SECURITY.md`. No analytics, tracking, or SEO cruft.
+- **M6 (done)** — branding + self-update: a low-entropy dot-halftone portrait banner (`src/banner.ts`) on `status`/`help` with terminal Unicode detection and an ASCII fallback (`SHANNON_BANNER` to force); a passive update check (`src/core/updates.ts`) that refreshes a ≤24h npm-registry cache in a detached background process and appends a one-line CTA to ordinary commands, plus an explicit `update`/`upgrade` command. Opt-out and zero-dep (built-in `fetch`); no runtime dependency added.
 
 ## When modifying
 

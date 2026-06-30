@@ -16,6 +16,13 @@ import { resolveAuto } from './core/autodir.js';
 import { ShannonError } from './core/errors.js';
 import { launchClaude } from './launch.js';
 import { banner } from './banner.js';
+import {
+    isNewer,
+    pendingUpdate,
+    refreshCache,
+    refreshInBackground,
+    updatesDisabled
+} from './core/updates.js';
 
 // Single-sourced against package.json by test/version.test.ts, so a release
 // bump cannot ship a stale self-reported version on npm or the SEA binaries.
@@ -35,15 +42,51 @@ const MANAGEMENT = new Set<string>([
     'status',
     'st',
     'init',
+    'update',
+    'upgrade',
     'help',
     '-h',
     '--help',
     '--version',
-    // Internal: invoked by the `shannon init` shell hooks, not by users.
-    '__auto'
+    // Internal: invoked by the `shannon init` shell hooks and the detached
+    // update-check spawn respectively, not by users.
+    '__auto',
+    '__check-updates'
+]);
+
+/**
+ * Commands that must never have an update CTA appended: the shell-integration
+ * hooks emit eval'd code to stdout (a stray line would break them), and the
+ * update commands speak for themselves.
+ */
+const NO_UPDATE_NOTICE = new Set<string>([
+    '__auto',
+    '__check-updates',
+    'update',
+    'upgrade'
 ]);
 
 export async function dispatch(argv: string[]): Promise<number> {
+    const cmd = argv[0];
+
+    // Passive update check: on any ordinary interactive invocation, refresh the
+    // cached "latest" in a detached background process (never blocking) and
+    // append a one-line CTA afterward if a newer release is known. Suppressed
+    // for the shell hooks, for `use --emit`, and when stderr isn't a TTY so it
+    // can't corrupt eval'd output or spam pipes/scripts.
+    const notice =
+        cmd !== undefined &&
+        !NO_UPDATE_NOTICE.has(cmd) &&
+        !(cmd === 'use' && argv.includes('--emit')) &&
+        process.stderr.isTTY &&
+        !updatesDisabled();
+    if (notice) refreshInBackground();
+    const code = await route(argv);
+    if (notice) emitUpdateNotice();
+    return code;
+}
+
+async function route(argv: string[]): Promise<number> {
     const cmd = argv[0];
 
     // A bare invocation (`shannon` / `claudep` / `clp` with no args) shows
@@ -78,6 +121,11 @@ export async function dispatch(argv: string[]): Promise<number> {
                 return cmdStatus();
             case 'init':
                 return cmdInit(argv.slice(1));
+            case 'update':
+            case 'upgrade':
+                return cmdUpdate();
+            case '__check-updates':
+                return cmdCheckUpdates();
             case '__auto':
                 return cmdAuto(argv.slice(1));
             case 'help':
@@ -443,6 +491,57 @@ function printVersion(): number {
     return 0;
 }
 
+/**
+ * Explicit `update` / `upgrade`: do a fresh, awaited registry check (this is
+ * the one place a check blocks, because the user asked for it) and report
+ * whether a newer release exists, with the commands to get it.
+ */
+async function cmdUpdate(): Promise<number> {
+    process.stdout.write(`Current version: ${VERSION}\n`);
+    const latest = await refreshCache(VERSION);
+    if (!latest) {
+        process.stdout.write(
+            'Could not reach the registry to check for updates (offline?).\n'
+        );
+        return 0;
+    }
+    if (isNewer(latest, VERSION)) {
+        process.stdout.write(`Latest version:  ${latest}  (update available)\n\n`);
+        process.stdout.write(upgradeHint());
+    } else {
+        process.stdout.write(`You're on the latest version.\n`);
+    }
+    return 0;
+}
+
+/**
+ * Internal: the detached background spawn's entry point. Silently refreshes the
+ * update cache and exits; its output is discarded by the parent.
+ */
+async function cmdCheckUpdates(): Promise<number> {
+    await refreshCache(VERSION);
+    return 0;
+}
+
+/** The one-line CTA appended to ordinary commands when an update is pending. */
+function emitUpdateNotice(): void {
+    const latest = pendingUpdate(VERSION);
+    if (!latest) return;
+    process.stderr.write(
+        `\nA new shannon release is available: ${VERSION} → ${latest}. ` +
+            `Run 'shannon update' to upgrade.\n`
+    );
+}
+
+/** Upgrade instructions, shared by the `update` command. */
+function upgradeHint(): string {
+    return (
+        'To upgrade:\n' +
+        '  pnpm add -g @cbnsndwch/shannon       # or: npm i -g @cbnsndwch/shannon@latest\n' +
+        'Prebuilt binaries: https://github.com/cbnsndwch/shannon/releases/latest\n'
+    );
+}
+
 function printHelp(): number {
     process.stdout.write(banner() + '\n');
     process.stdout.write(HELP);
@@ -637,6 +736,7 @@ Commands:
   delete, rm <name>        Delete a profile (--yes/-y/--force to skip confirmation)
   status, st               Show active + default profile
   init <shell>             Print shell integration (bash | zsh | fish | pwsh)
+  update, upgrade          Check for a newer release and show how to upgrade
   help, -h, --help         Show this help
   --version                Show version
 
