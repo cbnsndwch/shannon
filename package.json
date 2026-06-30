@@ -1,6 +1,6 @@
 {
     "name": "@cbnsndwch/shannon",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "description": "Manage isolated Claude Code configuration profiles — a zero-dependency TypeScript reimplementation of claude-code-profiles.",
     "keywords": [
         "CLAUDE_CONFIG_DIR",
