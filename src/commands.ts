@@ -41,7 +41,7 @@ import { flavorFor, highlight } from './core/highlight.js';
 
 // Single-sourced against package.json by test/version.test.ts, so a release
 // bump cannot ship a stale self-reported version on npm or the SEA binaries.
-export const VERSION = '0.1.4';
+export const VERSION = '0.1.5';
 
 /** First tokens that mean "manage profiles" rather than "launch claude". */
 const MANAGEMENT = new Set<string>([
