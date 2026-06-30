@@ -40,7 +40,7 @@ import { bold, cyan, dim, green, yellow } from './core/style.js';
 
 // Single-sourced against package.json by test/version.test.ts, so a release
 // bump cannot ship a stale self-reported version on npm or the SEA binaries.
-export const VERSION = '0.1.2';
+export const VERSION = '0.1.3';
 
 /** First tokens that mean "manage profiles" rather than "launch claude". */
 const MANAGEMENT = new Set<string>([
