@@ -15,6 +15,7 @@ import { assertValidName } from './core/validate.js';
 import { resolveAuto } from './core/autodir.js';
 import { ShannonError } from './core/errors.js';
 import { launchClaude } from './launch.js';
+import { banner } from './banner.js';
 
 // Single-sourced against package.json by test/version.test.ts, so a release
 // bump cannot ship a stale self-reported version on npm or the SEA binaries.
@@ -378,6 +379,7 @@ function cmdClone(args: string[]): number {
 }
 
 function cmdStatus(): number {
+    process.stdout.write(banner() + '\n');
     const resolved = resolveActive();
     if (resolved.name) {
         process.stdout.write(`Active profile: ${resolved.name}\n`);
@@ -442,6 +444,7 @@ function printVersion(): number {
 }
 
 function printHelp(): number {
+    process.stdout.write(banner() + '\n');
     process.stdout.write(HELP);
     return 0;
 }

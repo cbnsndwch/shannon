@@ -156,6 +156,7 @@ Leaving the directory reverts to the default profile. A manual `shannon use` ove
 
 - **`CLAUDE_CONFIG_DIR`** — the variable Claude Code reads to find its config directory; setting it is how Shannon selects a profile. An explicit value in your environment **overrides the default profile** for that session, and that is what `status` and `list` report as *active*. `shannon use` (with shell integration) sets it for you.
 - **`SHANNON_AUTO`** — internal state managed by the shell hooks to track which profile was auto-selected from a `.shannon` file. You don't set this yourself.
+- **`SHANNON_BANNER`** — controls the portrait banner shown above `status` and `help`. By default Shannon auto-detects whether your terminal supports Unicode and falls back to an ASCII rendering otherwise; set `SHANNON_BANNER=ascii` or `SHANNON_BANNER=unicode` to force one.
 
 ## Profiles
 
