@@ -1,3 +1,6 @@
+import { spawnSync } from 'node:child_process';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import {
     clearDefault,
@@ -23,6 +26,17 @@ import {
     refreshInBackground,
     updatesDisabled
 } from './core/updates.js';
+import {
+    type Shell,
+    SUPPORTED_SHELLS,
+    alreadyInstalled,
+    blockToAppend,
+    detectShell,
+    integrationLine,
+    isSupportedShell,
+    startupFile
+} from './core/integration.js';
+import { bold, cyan, dim, green, yellow } from './core/style.js';
 
 // Single-sourced against package.json by test/version.test.ts, so a release
 // bump cannot ship a stale self-reported version on npm or the SEA binaries.
@@ -42,6 +56,7 @@ const MANAGEMENT = new Set<string>([
     'status',
     'st',
     'init',
+    'setup',
     'update',
     'upgrade',
     'help',
@@ -121,6 +136,8 @@ async function route(argv: string[]): Promise<number> {
                 return cmdStatus();
             case 'init':
                 return cmdInit(argv.slice(1));
+            case 'setup':
+                return cmdSetup(argv.slice(1));
             case 'update':
             case 'upgrade':
                 return cmdUpdate();
@@ -369,8 +386,12 @@ function cmdUse(args: string[]): number {
     }
 
     // Standalone: a child process cannot mutate the parent shell, so show how.
+    // The human-facing lines go to stderr; the copy/eval-able export lines go to
+    // stdout (plain, so `eval`/redirect capture them cleanly).
+    process.stderr.write(`Profile ${bold(name)} → ${dim(dir)}\n`);
     process.stderr.write(
-        `Profile '${name}' resolved. For seamless 'use', run 'shannon init <shell>' (see help); until then activate it with:\n`
+        `For automatic switching, run ${bold('shannon setup')} once. ` +
+            `Or set it in this shell now:\n`
     );
     process.stdout.write(
         `${exportLine('posix', 'CLAUDE_CONFIG_DIR', dir)}      # bash / zsh\n`
@@ -459,6 +480,169 @@ function cmdInit(args: string[]): number {
     }
     process.stdout.write(snippet);
     return 0;
+}
+
+/**
+ * Interactive shell-integration installer. Rather than dumping the full snippet
+ * (which belongs at shell-startup, not in the user's hands), it offers to add a
+ * single `shannon init` line to the appropriate startup file for them, or to
+ * print just that line to paste. Non-interactively it only prints instructions —
+ * it never edits a file without a yes.
+ */
+async function cmdSetup(args: string[]): Promise<number> {
+    const requested = args[0];
+    let shell: Shell;
+    if (requested !== undefined) {
+        if (!isSupportedShell(requested)) {
+            throw new ShannonError(
+                `unsupported shell '${requested}'. Supported: ${SUPPORTED_SHELLS.join(', ')}`
+            );
+        }
+        shell = requested;
+    } else {
+        shell = detectShell();
+    }
+    const line = integrationLine(shell);
+    const file = resolveStartupFile(shell);
+
+    if (file && existsSync(file) && alreadyInstalled(readFileSync(file, 'utf8'))) {
+        process.stdout.write(
+            `${green('✓')} Shell integration already set up in ${bold(file)}.\n`
+        );
+        process.stdout.write(
+            dim(`  Restart your shell to pick up any changes.\n`)
+        );
+        return 0;
+    }
+
+    // No prompting unless we have a real terminal both ways — otherwise just
+    // show the manual steps so we never edit a file behind the user's back.
+    if (!(process.stdin.isTTY && process.stdout.isTTY)) {
+        printManualSetup(shell, line, file);
+        return 0;
+    }
+
+    process.stdout.write(
+        `\nSet up ${bold(shell)} integration so ${bold('shannon use')} switches the ` +
+            `live shell and a ${bold('.shannon')} file auto-selects a profile per directory.\n\n`
+    );
+    const choice = await promptMenu([
+        file
+            ? `Set it up for me   ${dim(`(adds one line to ${file})`)}`
+            : 'Set it up for me',
+        'Show me the line to add myself',
+        'Cancel'
+    ]);
+
+    if (choice === 0) {
+        if (!file) {
+            process.stdout.write(
+                yellow('\nCould not locate your PowerShell $PROFILE automatically.\n')
+            );
+            printManualSetup(shell, line, file);
+            return 0;
+        }
+        mkdirSync(dirname(file), { recursive: true });
+        appendFileSync(file, blockToAppend(shell));
+        process.stdout.write(
+            `\n${green('✓')} Added shannon integration to ${bold(file)}.\n`
+        );
+        process.stdout.write(
+            dim(`  Restart your shell (or run ${reloadHint(shell)}) to activate it.\n`)
+        );
+        return 0;
+    }
+    if (choice === 1) {
+        printManualSetup(shell, line, file);
+        return 0;
+    }
+    process.stdout.write('Cancelled.\n');
+    return 0;
+}
+
+/** Print the one line and where it goes, for manual copy/paste. */
+function printManualSetup(
+    shell: Shell,
+    line: string,
+    file: string | null
+): void {
+    const where = file ? bold(file) : 'your shell startup file';
+    process.stdout.write(`\nAdd this line to ${where}:\n\n`);
+    process.stdout.write(`    ${cyan(line)}\n\n`);
+    process.stdout.write(
+        dim(`Then restart your shell or run ${reloadHint(shell)}.\n`)
+    );
+}
+
+/** The command to reload a shell's startup file in place. */
+function reloadHint(shell: Shell): string {
+    switch (shell) {
+        case 'pwsh':
+            return '. $PROFILE';
+        case 'fish':
+            return 'source ~/.config/fish/config.fish';
+        case 'zsh':
+            return 'source ~/.zshrc';
+        default:
+            return 'source ~/.bashrc';
+    }
+}
+
+/**
+ * Resolve the startup file to edit: the conventional path for POSIX shells, or
+ * the live `$PROFILE` for PowerShell (queried by spawning pwsh/powershell, since
+ * it varies — e.g. OneDrive-redirected Documents). Null if it can't be found.
+ */
+function resolveStartupFile(shell: Shell): string | null {
+    if (shell !== 'pwsh') return startupFile(shell);
+    for (const exe of ['pwsh', 'powershell']) {
+        try {
+            const r = spawnSync(
+                exe,
+                [
+                    '-NoProfile',
+                    '-NoLogo',
+                    '-Command',
+                    '$PROFILE.CurrentUserCurrentHost'
+                ],
+                { encoding: 'utf8' }
+            );
+            if (!r.error && r.status === 0) {
+                const path = (r.stdout ?? '').trim();
+                if (path) return path;
+            }
+        } catch {
+            // Try the next executable.
+        }
+    }
+    return null;
+}
+
+/**
+ * Print a numbered menu and return the chosen zero-based index. An empty answer
+ * selects the first (recommended) option; out-of-range answers re-prompt.
+ */
+async function promptMenu(options: string[]): Promise<number> {
+    options.forEach((opt, i) =>
+        process.stdout.write(`  ${bold(String(i + 1))}  ${opt}\n`)
+    );
+    const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+    try {
+        for (;;) {
+            const answer = (await rl.question(dim('\nChoose [1]: '))).trim();
+            if (answer === '') return 0;
+            const n = Number.parseInt(answer, 10);
+            if (n >= 1 && n <= options.length) return n - 1;
+            process.stdout.write(
+                yellow(`Please enter a number between 1 and ${options.length}.\n`)
+            );
+        }
+    } finally {
+        rl.close();
+    }
 }
 
 /**
@@ -557,6 +741,13 @@ function printHelp(): number {
 function printBanner(): void {
     if (!process.stdout.isTTY) return;
     process.stdout.write(banner() + '\n');
+    process.stdout.write(
+        `${bold(cyan('shannon'))} ${dim(`v${VERSION}`)} ` +
+            `${dim('— isolated Claude Code configuration profiles')}\n`
+    );
+    process.stdout.write(
+        dim('  Not affiliated with Anthropic · a nod to Claude Shannon\n')
+    );
 }
 
 // --- helpers ---
@@ -746,7 +937,8 @@ Commands:
   clone <src> <dst>        Copy a profile (omits credentials; --with-credentials to include)
   delete, rm <name>        Delete a profile (--yes/-y/--force to skip confirmation)
   status, st               Show active + default profile
-  init <shell>             Print shell integration (bash | zsh | fish | pwsh)
+  setup [shell]            Install shell integration (interactive; does it for you)
+  init <shell>             Print raw shell integration (bash | zsh | fish | pwsh)
   update, upgrade          Check for a newer release and show how to upgrade
   help, -h, --help         Show this help
   --version                Show version

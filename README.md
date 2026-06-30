@@ -102,7 +102,8 @@ A bare `shannon` (or `claudep` / `clp`) prints profile status — it never launc
 | `clone <src> <dst> [--with-credentials]` | Copy a profile. Credentials are omitted unless `--with-credentials`. |
 | `delete <name> [--yes]` (`rm`) | Delete a profile and its data. `--yes` (aliases `-y`, `--force`) skips the confirmation prompt. |
 | `status` (`st`) | Show the active and default profile. |
-| `init <bash\|zsh\|fish\|pwsh>` | Print the shell integration snippet for that shell (see below). |
+| `setup [shell]` | Install shell integration interactively — adds one line to your startup file for you, or shows it to paste (see below). |
+| `init <bash\|zsh\|fish\|pwsh>` | Print the raw shell integration snippet for that shell (what `setup`'s one line re-generates at startup). |
 | `update` (`upgrade`) | Check the npm registry for a newer release and print how to upgrade. |
 | `help` (`-h`, `--help`) | Show the command reference. |
 | `--version` | Print the version. |
@@ -120,7 +121,15 @@ A bare `shannon` (or `claudep` / `clp`) prints profile status — it never launc
 
 ## Shell integration
 
-The launcher already resolves the default profile, but two things need a shell function: making `use` switch the *live* shell, and auto-selecting a profile when you `cd` into a project. Add the line for your shell to its startup file:
+The launcher already resolves the default profile, but two things need a shell function: making `use` switch the *live* shell, and auto-selecting a profile when you `cd` into a project.
+
+The easiest way is to let Shannon set it up for you:
+
+```sh
+shannon setup        # detects your shell, offers to add one line to its startup file
+```
+
+`setup` is interactive: it either adds the line for you or prints just that line to paste — your call. To do it by hand, add the line for your shell to its startup file:
 
 ```sh
 # bash — ~/.bashrc
@@ -135,6 +144,8 @@ shannon init fish | source
 # PowerShell — $PROFILE
 shannon init pwsh | Out-String | Invoke-Expression
 ```
+
+(`shannon init <shell>` prints the full integration that the one line above re-generates on each shell launch — you don't paste that yourself.)
 
 This defines `shannon` / `claudep` / `clp` as thin wrappers around the binary. With it loaded:
 
@@ -158,6 +169,7 @@ Leaving the directory reverts to the default profile. A manual `shannon use` ove
 - **`CLAUDE_CONFIG_DIR`** — the variable Claude Code reads to find its config directory; setting it is how Shannon selects a profile. An explicit value in your environment **overrides the default profile** for that session, and that is what `status` and `list` report as *active*. `shannon use` (with shell integration) sets it for you.
 - **`SHANNON_AUTO`** — internal state managed by the shell hooks to track which profile was auto-selected from a `.shannon` file. You don't set this yourself.
 - **`SHANNON_BANNER`** — controls the portrait banner shown above `status` and `help` (only when stdout is a terminal — it's suppressed for pipes, scripts, and the shell-integration wrappers). By default Shannon auto-detects whether your terminal supports Unicode and falls back to an ASCII rendering otherwise; set `SHANNON_BANNER=ascii` or `SHANNON_BANNER=unicode` to force one.
+- **`NO_COLOR` / `FORCE_COLOR`** — Shannon colorizes output only when stdout is a terminal; set `NO_COLOR` to force plain output or `FORCE_COLOR` to keep colors when piping. (Colors are never written to captured/eval'd output, so copied text and shell snippets stay clean regardless.)
 - **`SHANNON_NO_UPDATE_CHECK`** — set to any value to disable the update check. Shannon otherwise checks the npm registry at most once a day (in a detached background process, never blocking a command) and appends a one-line notice when a newer release exists; the check sends no identifying data. `NO_UPDATE_NOTIFIER` and `CI` are also honored, and the notice is suppressed when output isn't a terminal.
 
 ## Profiles
@@ -175,7 +187,7 @@ Shannon launches the real `claude`; it doesn't bundle it. Install [Claude Code](
 Your package manager's global bin directory isn't on `PATH`. Find it with `pnpm bin -g` (or `npm bin -g`) and add it to your shell's `PATH`. With pnpm, `pnpm setup` configures this for you.
 
 **`shannon use <name>` seems to do nothing.**
-A child process can't change its parent shell's environment, so on its own `use` only prints the export line for you to run. To make it switch the live shell, load [shell integration](#shell-integration) (`shannon init <shell>`) once. Until then, copy the printed `export …` / `$env:…` line.
+A child process can't change its parent shell's environment, so on its own `use` only prints the export line for you to run. To make it switch the live shell, run `shannon setup` once (see [shell integration](#shell-integration)). Until then, copy the printed `export …` / `$env:…` line.
 
 **Migrating from `claude-code-profiles`.**
 Shannon's storage is byte-compatible with the original shell tool (same directory layout, same `.default` file). Your existing profiles just work — there's no migration step. Install Shannon, run `shannon list`, and they'll be there.
