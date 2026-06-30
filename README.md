@@ -80,12 +80,15 @@ Run `shannon help` for the same reference in your terminal. Aliases are shown in
 
 ### Launch
 
+A bare `shannon` (or `claudep` / `clp`) prints profile status — it never launches `claude` implicitly. Launching is always explicit:
+
 | Form | What it does |
 | --- | --- |
-| `shannon` | Launch Claude Code with the active profile. |
-| `shannon run [args…]` | Launch, forcing the rest to pass through to `claude`. |
+| `shannon run [args…]` | Launch Claude Code with the active profile, passing the rest through to `claude`. |
 | `shannon -- [args…]` | Same, ending Shannon's own argument parsing. |
 | `shannon <args…>` | Any token that isn't a subcommand launches `claude` with the args passed through (`shannon --resume`, `shannon -p "…"`). |
+
+> On PowerShell, use `shannon run …` rather than `shannon -- …`: PowerShell strips a bare `--` before Shannon sees it.
 
 ### Manage
 

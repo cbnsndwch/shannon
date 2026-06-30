@@ -45,9 +45,11 @@ const MANAGEMENT = new Set<string>([
 export async function dispatch(argv: string[]): Promise<number> {
     const cmd = argv[0];
 
-    // Launch semantics: a bare `shannon`, an explicit `run`/`--`, or any token
-    // that isn't one of our subcommands is passed straight through to claude.
-    if (cmd === undefined) return safe(() => launchClaude([]));
+    // A bare invocation (`shannon` / `claudep` / `clp` with no args) shows
+    // profile status, matching the original shell tool — it never launches
+    // claude implicitly. Launching is always explicit: `run`, `--`, or any
+    // token that isn't one of our subcommands is passed straight through.
+    if (cmd === undefined) return safe(() => cmdStatus());
     if (cmd === 'run') return safe(() => launchClaude(argv.slice(1)));
     if (cmd === '--') return safe(() => launchClaude(argv.slice(1)));
     if (!MANAGEMENT.has(cmd)) return safe(() => launchClaude(argv));
@@ -618,9 +620,9 @@ const INIT_SNIPPETS: Record<string, string> = {
 const HELP = `shannon — manage isolated Claude Code configuration profiles
 
 Usage:
-  shannon [claude args...]        Launch Claude Code with the active profile
-  shannon run [claude args...]    Same, explicit (use -- to end shannon parsing)
-  shannon <command> [args...]
+  shannon                         Show active + default profile status
+  shannon <command> [args...]     Manage profiles (see commands below)
+  shannon run [claude args...]    Launch Claude Code with the active profile (use -- to end shannon parsing)
 
 Commands:
   create <name>            Create a new profile (--from <src> [--with-credentials] copies one)

@@ -53,7 +53,7 @@ Profile names must match `[A-Za-z0-9_-]+` (reject empty, leading `.`, `..`, `/`,
 
 ## Command interface
 
-`create <name> [--from <src>] [--with-credentials]`, `list`/`ls`, `default [name]`, `which [name]`, `use <name>`, `clone <src> <dst> [--with-credentials]`, `delete`/`rm <name> [--yes]`, `status`/`st`, `init <shell>`, `help`, `--version`. Bare `shannon`, `shannon run …`, `shannon -- …`, or any non-subcommand token launches `claude` with the active profile. `create --from <src>` copies an existing profile (same shared copy routine as `clone`); both omit `.credentials.json` unless `--with-credentials` is passed.
+`create <name> [--from <src>] [--with-credentials]`, `list`/`ls`, `default [name]`, `which [name]`, `use <name>`, `clone <src> <dst> [--with-credentials]`, `delete`/`rm <name> [--yes]`, `status`/`st`, `init <shell>`, `help`, `--version`. Bare `shannon` (no args) prints profile status and never launches `claude` implicitly. `shannon run …`, `shannon -- …`, or any non-subcommand token launches `claude` with the active profile. `create --from <src>` copies an existing profile (same shared copy routine as `clone`); both omit `.credentials.json` unless `--with-credentials` is passed.
 
 ## Design constraints (do not violate)
 
