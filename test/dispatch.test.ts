@@ -49,3 +49,15 @@ test('bare invocation prints profile status, does not launch', async () => {
         assert.match(out(), /No default profile set/);
     });
 });
+
+// `-v` / `-V` are shannon's own version flag, not passed through to claude (a
+// passthrough would launch the real binary and print *its* version).
+test('-v and -V print shannon version, not claude', async () => {
+    for (const flag of ['-v', '-V', '--version']) {
+        await withCapturedStatus(async out => {
+            const code = await dispatch([flag]);
+            assert.equal(code, 0);
+            assert.match(out().trim(), /^\d+\.\d+\.\d+$/);
+        });
+    }
+});

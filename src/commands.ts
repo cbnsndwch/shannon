@@ -64,6 +64,8 @@ const MANAGEMENT = new Set<string>([
     '-h',
     '--help',
     '--version',
+    '-v',
+    '-V',
     // Internal: invoked by the `shannon init` shell hooks and the detached
     // update-check spawn respectively, not by users.
     '__auto',
@@ -151,6 +153,8 @@ async function route(argv: string[]): Promise<number> {
             case '--help':
                 return printHelp();
             case '--version':
+            case '-v':
+            case '-V':
                 return printVersion();
             default:
                 return printHelp();
@@ -962,7 +966,7 @@ Commands:
   init <shell>             Print raw shell integration (bash | zsh | fish | pwsh)
   update, upgrade          Check for a newer release and show how to upgrade
   help, -h, --help         Show this help
-  --version                Show version
+  --version, -v            Show version
 
 Shell integration (recommended):
   Add the matching line to your shell startup file, then 'use' switches the
