@@ -37,6 +37,7 @@ import {
     startupFile
 } from './core/integration.js';
 import { bold, cyan, dim, green, yellow } from './core/style.js';
+import { flavorFor, highlight } from './core/highlight.js';
 
 // Single-sourced against package.json by test/version.test.ts, so a release
 // bump cannot ship a stale self-reported version on npm or the SEA binaries.
@@ -478,8 +479,28 @@ function cmdInit(args: string[]): number {
             `unsupported shell '${shell}'. Supported: bash, zsh, fish, pwsh`
         );
     }
-    process.stdout.write(snippet);
+    // Piped/eval (the normal `eval "$(shannon init …)"` path) gets the raw
+    // snippet, byte for byte. Shown in a terminal, it's syntax-highlighted and
+    // padded so it reads as code rather than a wall — the colour is cosmetic and
+    // strips cleanly, so copying it still yields the exact same text.
+    if (process.stdout.isTTY) {
+        printSnippetPretty(shell, snippet);
+    } else {
+        process.stdout.write(snippet);
+    }
     return 0;
+}
+
+/** Render an `init` snippet for human eyes: highlighted, indented, breathing. */
+function printSnippetPretty(shell: string, snippet: string): void {
+    const body = highlight(snippet.replace(/\n+$/, ''), flavorFor(shell))
+        .split('\n')
+        .map(line => (line ? `    ${line}` : ''))
+        .join('\n');
+    process.stdout.write(`\n${body}\n\n`);
+    process.stdout.write(
+        `    ${dim('Tip: run')} ${bold('shannon setup')} ${dim('to add this for you.')}\n\n`
+    );
 }
 
 /**
