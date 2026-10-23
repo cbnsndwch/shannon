@@ -4,9 +4,9 @@ Guidance for working in this repository.
 
 ## Project
 
-**Shannon** is a zero-dependency TypeScript reimplementation of `claude-code-profiles`. It manages multiple isolated Claude Code configuration profiles by resolving the `CLAUDE_CONFIG_DIR` environment variable that the `claude` CLI honors. Each profile is a complete, isolated config directory (settings, credentials, MCP servers, history).
+**Shannon** is a zero-dependency TypeScript reimplementation of `claude-code-profiles`, extended with Codex CLI support. It manages isolated Claude Code profiles via `CLAUDE_CONFIG_DIR` and Codex profiles via `CODEX_HOME`. Each profile is a complete, isolated config directory (settings, credentials, MCP servers, history).
 
-Published as **`@cbnsndwch/shannon`**. Installs three interchangeable commands — `shannon`, `claudep`, `clp` — all the same CLI.
+Published as **`@cbnsndwch/shannon`**. Installs three interchangeable Claude commands — `shannon`, `claudep`, `clp` — plus `gpt` for Codex CLI and ChatGPT subscriptions.
 
 Shannon is an independent project, **not affiliated with or endorsed by Anthropic**; the name is a nod to Claude Shannon. It interoperates only through the public `CLAUDE_CONFIG_DIR` variable. Keep "Claude" out of the package name and branding; nominative references that merely describe interop are fine. See `NOTICE.md`.
 
@@ -31,8 +31,12 @@ The binary does everything (management + launching) and **never shadows the real
 - `src/core/autodir.ts` — `findMarker` (walk up for a `.shannon` file) + `resolveAuto` (decide set/unset/none against the `SHANNON_AUTO` marker env var). Used by the internal `__auto` command the shell hooks call on each directory change.
 
 - `src/cli.ts` — entry (`#!/usr/bin/env node`); `await dispatch(argv)`.
+- `src/gpt.ts` — Codex entry; `await dispatch(argv, CODEX)`.
+- `src/core/provider.ts` — provider metadata: command, binary, config env, storage, secrets, directory marker, and auto-selection state. Existing APIs default to `CLAUDE`; pass `CODEX` explicitly for Codex profiles. SEA binaries select Codex when invoked as `gpt`/`gpt.exe`.
+- `src/core/shell.ts` — shared shell snippet generator. Provider-specific wrappers/hooks coexist; PowerShell shares a single saved original prompt.
+- `src/core/accounts.ts` — per-profile Codex login slots in `.gpt-accounts`, active-login metadata, refreshed-token synchronization, journaled account switching, staged logins, and a profile lock. Call mutations while holding `withAccountLock`. Existing profiles without login slots retain their launch behavior. Once enabled, wrapper-launched Codex sessions hold the same lock for their full lifetime and use `--no-daemon`.
 - `src/commands.ts` — dispatch (known subcommand → manage; bare / `run` / `--` / unknown token → launch) plus handlers and help text.
-- `src/launch.ts` — `findClaude()` (PATH/PATHEXT scan) + `launchClaude()` (spawns the real claude with the resolved `CLAUDE_CONFIG_DIR`).
+- `src/launch.ts` — provider-aware PATH/PATHEXT lookup and launch; legacy `findClaude`/`launchClaude` helpers remain available. Native executables receive an argv array; Windows batch shims escape both command parsing passes. Codex launches with a selected home add `-c "cli_auth_credentials_store='file'"` so credentials are stored inside the profile.
 - `src/core/paths.ts` — platform data dir + `.default` + profile dir.
 - `src/core/validate.ts` — profile-name rules.
 - `src/core/profiles.ts` — create/list/delete/default/clone + `resolveActive` (an explicit `CLAUDE_CONFIG_DIR` wins over the default profile).
@@ -48,6 +52,10 @@ Byte-compatible with the original shell tool, so existing profiles work with zer
 - Windows: `%LOCALAPPDATA%\claude-profiles\`
 - otherwise: `$XDG_DATA_HOME/claude-profiles/` (default `~/.local/share/claude-profiles/`)
 - `.default` — plain text, the default profile name, **no trailing newline**
+
+Codex uses the same layout under `codex-profiles` instead of `claude-profiles`, with an independent `.default`. Its session override is `CODEX_HOME`, project marker is `.gpt`, and hook state is `GPT_AUTO`. Clones omit `auth.json` unless `--with-credentials` is passed. No existing user login is imported or changed.
+
+`gpt account` manages named logins independently of profile context: `save <name>`, `login <name> [--device-auth]`, `list`, `use <name> [--resume]`, `next [--resume]`, and `unlock --yes`. Sign-in is staged in a temporary home; commit only a successful file-based login. `use`/`next` switch only `auth.json`, preserving settings and transcripts. `--resume` performs the switch and launches `codex resume --last` under one lock. Switching requires closing the running CLI session. The lock never recovers itself automatically; explicit unlock refuses a live owner. Clones omit `.gpt-accounts` unless credentials are requested, and always omit `.gpt-lock`. Account commands require an existing managed profile; an arbitrary or nested `CODEX_HOME` is not a managed profile.
 
 Profile names must match `[A-Za-z0-9_-]+` (reject empty, leading `.`, `..`, `/`, `\`). The name read from `.default` is re-validated before use (defense in depth).
 
@@ -82,4 +90,4 @@ Profile names must match `[A-Za-z0-9_-]+` (reject empty, leading `.`, `..`, `/`,
 - `init` shell code must stay consistent across bash / zsh / fish / PowerShell.
 - Respect owner edits to `README.md`, `.gitignore`, `package.json`, and the `.md` license/notice filenames.
 - Commit messages: conventional and factual; no attribution or co-author trailers.
-- The Windows launch→spawn path in `src/launch.ts` is written but not yet verified against a real `claude`.
+- Windows batch launch and combined PowerShell integration are covered by `test/gpt.test.ts` using isolated fake CLIs; real account login remains an interactive user step.

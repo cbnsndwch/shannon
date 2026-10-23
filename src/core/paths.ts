@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { CLAUDE, type Provider } from './provider.js';
 
 /**
  * Resolve the profiles data directory. Kept byte-compatible with the original
@@ -7,24 +8,30 @@ import { join } from 'node:path';
  *   - Windows:        %LOCALAPPDATA%\claude-profiles
  *   - everything else: $XDG_DATA_HOME/claude-profiles (default ~/.local/share)
  */
-export function dataDir(env: NodeJS.ProcessEnv = process.env): string {
+export function dataDir(
+    env: NodeJS.ProcessEnv = process.env,
+    provider: Provider = CLAUDE
+): string {
     if (process.platform === 'win32') {
         const local = env.LOCALAPPDATA;
         if (local) {
-            return join(local, 'claude-profiles');
+            return join(local, provider.dataDirectory);
         }
-        return join(homedir(), 'AppData', 'Local', 'claude-profiles');
+        return join(homedir(), 'AppData', 'Local', provider.dataDirectory);
     }
     const xdg = env.XDG_DATA_HOME;
     if (xdg) {
-        return join(xdg, 'claude-profiles');
+        return join(xdg, provider.dataDirectory);
     }
-    return join(homedir(), '.local', 'share', 'claude-profiles');
+    return join(homedir(), '.local', 'share', provider.dataDirectory);
 }
 
 /** Path to the `.default` marker file (plain text, profile name, no newline). */
-export function defaultFile(env: NodeJS.ProcessEnv = process.env): string {
-    return join(dataDir(env), '.default');
+export function defaultFile(
+    env: NodeJS.ProcessEnv = process.env,
+    provider: Provider = CLAUDE
+): string {
+    return join(dataDir(env, provider), '.default');
 }
 
 /**
@@ -39,7 +46,8 @@ export function updateCacheFile(env: NodeJS.ProcessEnv = process.env): string {
 /** Path to a named profile's config directory. */
 export function profileDir(
     name: string,
-    env: NodeJS.ProcessEnv = process.env
+    env: NodeJS.ProcessEnv = process.env,
+    provider: Provider = CLAUDE
 ): string {
-    return join(dataDir(env), name);
+    return join(dataDir(env, provider), name);
 }

@@ -8,14 +8,24 @@ import {
     statSync,
     writeFileSync
 } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative, sep } from 'node:path';
 
 import { dataDir, defaultFile, profileDir } from './paths.js';
 import { assertValidName, validateName } from './validate.js';
 import { ShannonError } from './errors.js';
+import { CLAUDE, CODEX, type Provider } from './provider.js';
+import {
+    ACCOUNT_LOCK,
+    accountsEnabled,
+    syncActiveAccount,
+    withAccountLock
+} from './accounts.js';
 
-export function listProfiles(env: NodeJS.ProcessEnv = process.env): string[] {
-    const dir = dataDir(env);
+export function listProfiles(
+    env: NodeJS.ProcessEnv = process.env,
+    provider: Provider = CLAUDE
+): string[] {
+    const dir = dataDir(env, provider);
     if (!existsSync(dir)) {
         return [];
     }
@@ -27,18 +37,20 @@ export function listProfiles(env: NodeJS.ProcessEnv = process.env): string[] {
 
 export function profileExists(
     name: string,
-    env: NodeJS.ProcessEnv = process.env
+    env: NodeJS.ProcessEnv = process.env,
+    provider: Provider = CLAUDE
 ): boolean {
-    const dir = profileDir(name, env);
+    const dir = profileDir(name, env, provider);
     return existsSync(dir) && statSync(dir).isDirectory();
 }
 
 export function createProfile(
     name: string,
-    env: NodeJS.ProcessEnv = process.env
+    env: NodeJS.ProcessEnv = process.env,
+    provider: Provider = CLAUDE
 ): string {
     assertValidName(name);
-    const dir = profileDir(name, env);
+    const dir = profileDir(name, env, provider);
     if (existsSync(dir)) {
         throw new ShannonError(`profile '${name}' already exists`);
     }
@@ -48,20 +60,26 @@ export function createProfile(
 
 export function deleteProfile(
     name: string,
-    env: NodeJS.ProcessEnv = process.env
+    env: NodeJS.ProcessEnv = process.env,
+    provider: Provider = CLAUDE
 ): void {
     assertValidName(name);
-    if (!profileExists(name, env)) {
+    if (!profileExists(name, env, provider)) {
         throw new ShannonError(`profile '${name}' does not exist`);
     }
-    rmSync(profileDir(name, env), { recursive: true, force: true });
+    const dir = profileDir(name, env, provider);
+    const remove = () => rmSync(dir, { recursive: true, force: true });
+    if (provider === CODEX && accountsEnabled(dir))
+        withAccountLock(dir, remove);
+    else remove();
 }
 
 /** Read the default profile name, or null if unset/empty. */
 export function getDefault(
-    env: NodeJS.ProcessEnv = process.env
+    env: NodeJS.ProcessEnv = process.env,
+    provider: Provider = CLAUDE
 ): string | null {
-    const file = defaultFile(env);
+    const file = defaultFile(env, provider);
     if (!existsSync(file)) {
         return null;
     }
@@ -71,21 +89,25 @@ export function getDefault(
 
 export function setDefault(
     name: string,
-    env: NodeJS.ProcessEnv = process.env
+    env: NodeJS.ProcessEnv = process.env,
+    provider: Provider = CLAUDE
 ): void {
     assertValidName(name);
-    if (!profileExists(name, env)) {
+    if (!profileExists(name, env, provider)) {
         throw new ShannonError(
-            `profile '${name}' does not exist. Create it with: shannon create ${name}`
+            `profile '${name}' does not exist. Create it with: ${provider.command} create ${name}`
         );
     }
-    mkdirSync(dataDir(env), { recursive: true });
+    mkdirSync(dataDir(env, provider), { recursive: true });
     // No trailing newline, matching the original shell tool's .default format.
-    writeFileSync(defaultFile(env), name);
+    writeFileSync(defaultFile(env, provider), name);
 }
 
-export function clearDefault(env: NodeJS.ProcessEnv = process.env): void {
-    const file = defaultFile(env);
+export function clearDefault(
+    env: NodeJS.ProcessEnv = process.env,
+    provider: Provider = CLAUDE
+): void {
+    const file = defaultFile(env, provider);
     if (existsSync(file)) {
         rmSync(file, { force: true });
     }
@@ -94,9 +116,6 @@ export function clearDefault(env: NodeJS.ProcessEnv = process.env): void {
 export interface CloneOptions {
     withCredentials?: boolean;
 }
-
-/** Files never copied unless --with-credentials is passed. */
-const SECRET_FILES = new Set(['.credentials.json']);
 
 /**
  * Shared copy routine behind both `clone` and `create --from`: validate both
@@ -108,27 +127,39 @@ export function copyProfile(
     src: string,
     dst: string,
     opts: CloneOptions = {},
-    env: NodeJS.ProcessEnv = process.env
+    env: NodeJS.ProcessEnv = process.env,
+    provider: Provider = CLAUDE
 ): string {
     assertValidName(src);
     assertValidName(dst);
-    if (!profileExists(src, env)) {
+    if (!profileExists(src, env, provider)) {
         throw new ShannonError(`source profile '${src}' does not exist`);
     }
-    const dstDir = profileDir(dst, env);
+    const dstDir = profileDir(dst, env, provider);
     if (existsSync(dstDir)) {
         throw new ShannonError(`profile '${dst}' already exists`);
     }
-    const srcDir = profileDir(src, env);
-    mkdirSync(dstDir, { recursive: true });
-    for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
-        if (!opts.withCredentials && SECRET_FILES.has(entry.name)) {
-            continue;
+    const srcDir = profileDir(src, env, provider);
+    const copy = () => {
+        if (provider === CODEX && accountsEnabled(srcDir))
+            syncActiveAccount(srcDir);
+        mkdirSync(dstDir, { recursive: true });
+        for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
+            if (provider === CODEX && entry.name === ACCOUNT_LOCK) continue;
+            if (
+                !opts.withCredentials &&
+                provider.secretFiles.includes(entry.name)
+            ) {
+                continue;
+            }
+            cpSync(join(srcDir, entry.name), join(dstDir, entry.name), {
+                recursive: true
+            });
         }
-        cpSync(join(srcDir, entry.name), join(dstDir, entry.name), {
-            recursive: true
-        });
-    }
+    };
+    if (provider === CODEX && accountsEnabled(srcDir))
+        withAccountLock(srcDir, copy);
+    else copy();
     return dstDir;
 }
 
@@ -146,20 +177,31 @@ export interface Resolved {
  * re-validated here — defense in depth, in case `.default` was hand-edited —
  * so a tampered marker can never be turned into a path we hand to claude.
  */
-export function resolveActive(env: NodeJS.ProcessEnv = process.env): Resolved {
-    const explicit = env.CLAUDE_CONFIG_DIR;
+export function resolveActive(
+    env: NodeJS.ProcessEnv = process.env,
+    provider: Provider = CLAUDE
+): Resolved {
+    const explicit = env[provider.configEnv];
     if (explicit) {
-        const base = dataDir(env).replace(/\\/g, '/');
-        const norm = explicit.replace(/\\/g, '/');
+        const candidate = relative(dataDir(env, provider), explicit);
         let name: string | null = null;
-        if (norm.startsWith(base + '/')) {
-            name = norm.slice(base.length + 1).split('/')[0] || null;
+        if (
+            candidate &&
+            !candidate.includes(sep) &&
+            validateName(candidate).ok &&
+            profileExists(candidate, env, provider)
+        ) {
+            name = candidate;
         }
         return { dir: explicit, name, source: 'env' };
     }
-    const def = getDefault(env);
-    if (def && validateName(def).ok && profileExists(def, env)) {
-        return { dir: profileDir(def, env), name: def, source: 'default' };
+    const def = getDefault(env, provider);
+    if (def && validateName(def).ok && profileExists(def, env, provider)) {
+        return {
+            dir: profileDir(def, env, provider),
+            name: def,
+            source: 'default'
+        };
     }
     return { dir: null, name: null, source: 'none' };
 }

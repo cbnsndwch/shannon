@@ -1,11 +1,13 @@
 {
     "name": "@cbnsndwch/shannon",
-    "version": "0.1.5",
-    "description": "Manage isolated Claude Code configuration profiles — a zero-dependency TypeScript reimplementation of claude-code-profiles.",
+    "version": "0.2.0-rc.1",
+    "description": "Manage isolated Claude Code and Codex CLI profiles with separate accounts, settings, and history.",
     "keywords": [
         "CLAUDE_CONFIG_DIR",
+        "chatgpt",
         "claude-code",
         "cli",
+        "codex",
         "config",
         "profiles"
     ],
@@ -22,6 +24,7 @@
     "bin": {
         "claudep": "dist/src/cli.js",
         "clp": "dist/src/cli.js",
+        "gpt": "dist/src/gpt.js",
         "shannon": "dist/src/cli.js"
     },
     "files": [

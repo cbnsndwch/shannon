@@ -1,5 +1,11 @@
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import {
+    appendFileSync,
+    existsSync,
+    mkdirSync,
+    readFileSync,
+    rmSync
+} from 'node:fs';
 import { dirname } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import {
@@ -17,7 +23,21 @@ import { profileDir } from './core/paths.js';
 import { assertValidName } from './core/validate.js';
 import { resolveAuto } from './core/autodir.js';
 import { ShannonError } from './core/errors.js';
-import { launchClaude } from './launch.js';
+import { launch } from './launch.js';
+import { CLAUDE, CODEX, type Provider } from './core/provider.js';
+import {
+    accountsEnabled,
+    activeAccount,
+    finishAccountLogin,
+    listAccounts,
+    nextAccount,
+    prepareAccountLogin,
+    saveAccount,
+    unlockAccounts,
+    useAccount,
+    withAccountLock
+} from './core/accounts.js';
+import { initSnippet } from './core/shell.js';
 import { banner } from './banner.js';
 import {
     isNewer,
@@ -41,7 +61,7 @@ import { flavorFor, highlight } from './core/highlight.js';
 
 // Single-sourced against package.json by test/version.test.ts, so a release
 // bump cannot ship a stale self-reported version on npm or the SEA binaries.
-export const VERSION = '0.1.5';
+export const VERSION = '0.2.0-rc.1';
 
 /** First tokens that mean "manage profiles" rather than "launch claude". */
 const MANAGEMENT = new Set<string>([
@@ -84,7 +104,10 @@ const NO_UPDATE_NOTICE = new Set<string>([
     'upgrade'
 ]);
 
-export async function dispatch(argv: string[]): Promise<number> {
+export async function dispatch(
+    argv: string[],
+    provider: Provider = CLAUDE
+): Promise<number> {
     const cmd = argv[0];
 
     // Passive update check: on any ordinary interactive invocation, refresh the
@@ -99,84 +122,96 @@ export async function dispatch(argv: string[]): Promise<number> {
         process.stderr.isTTY &&
         !updatesDisabled();
     if (notice) refreshInBackground();
-    const code = await route(argv);
-    if (notice) emitUpdateNotice();
+    const code = await route(argv, provider);
+    if (notice) emitUpdateNotice(provider);
     return code;
 }
 
-async function route(argv: string[]): Promise<number> {
+async function route(argv: string[], provider: Provider): Promise<number> {
     const cmd = argv[0];
 
     // A bare invocation (`shannon` / `claudep` / `clp` with no args) shows
     // profile status, matching the original shell tool — it never launches
     // claude implicitly. Launching is always explicit: `run`, `--`, or any
     // token that isn't one of our subcommands is passed straight through.
-    if (cmd === undefined) return safe(() => cmdStatus());
-    if (cmd === 'run') return safe(() => launchClaude(argv.slice(1)));
-    if (cmd === '--') return safe(() => launchClaude(argv.slice(1)));
-    if (!MANAGEMENT.has(cmd)) return safe(() => launchClaude(argv));
+    if (cmd === undefined) return safe(() => cmdStatus(provider), provider);
+    if (cmd === 'run' || cmd === '--') {
+        return safe(
+            () => launch(argv.slice(1), process.env, provider),
+            provider
+        );
+    }
+    if (cmd === 'account' && provider === CODEX) {
+        return safe(() => cmdAccount(argv.slice(1)), provider);
+    }
+    if (!MANAGEMENT.has(cmd)) {
+        return safe(() => launch(argv, process.env, provider), provider);
+    }
 
     return safe(async () => {
         switch (cmd) {
             case 'create':
-                return cmdCreate(argv.slice(1));
+                return cmdCreate(argv.slice(1), provider);
             case 'list':
             case 'ls':
-                return cmdList();
+                return cmdList(provider);
             case 'default':
-                return cmdDefault(argv.slice(1));
+                return cmdDefault(argv.slice(1), provider);
             case 'which':
-                return cmdWhich(argv.slice(1));
+                return cmdWhich(argv.slice(1), provider);
             case 'delete':
             case 'rm':
-                return cmdDelete(argv.slice(1));
+                return cmdDelete(argv.slice(1), provider);
             case 'use':
-                return cmdUse(argv.slice(1));
+                return cmdUse(argv.slice(1), provider);
             case 'clone':
-                return cmdClone(argv.slice(1));
+                return cmdClone(argv.slice(1), provider);
             case 'status':
             case 'st':
-                return cmdStatus();
+                return cmdStatus(provider);
             case 'init':
-                return cmdInit(argv.slice(1));
+                return cmdInit(argv.slice(1), provider);
             case 'setup':
-                return cmdSetup(argv.slice(1));
+                return cmdSetup(argv.slice(1), provider);
             case 'update':
             case 'upgrade':
                 return cmdUpdate();
             case '__check-updates':
                 return cmdCheckUpdates();
             case '__auto':
-                return cmdAuto(argv.slice(1));
+                return cmdAuto(argv.slice(1), provider);
             case 'help':
             case '-h':
             case '--help':
-                return printHelp();
+                return printHelp(provider);
             case '--version':
             case '-v':
             case '-V':
                 return printVersion();
             default:
-                return printHelp();
+                return printHelp(provider);
         }
-    });
+    }, provider);
 }
 
-async function safe(fn: () => number | Promise<number>): Promise<number> {
+async function safe(
+    fn: () => number | Promise<number>,
+    provider: Provider
+): Promise<number> {
     try {
         return await fn();
     } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        process.stderr.write(`shannon: ${msg}\n`);
+        process.stderr.write(`${provider.command}: ${msg}\n`);
         return 1;
     }
 }
 
-function cmdCreate(args: string[]): number {
+function cmdCreate(args: string[], provider: Provider): number {
     const { name, from, withCredentials, hasFrom } = parseCreate(args);
     if (!name) {
         throw new ShannonError(
-            'usage: shannon create <name> [--from <src> [--with-credentials]]'
+            `usage: ${provider.command} create <name> [--from <src> [--with-credentials]]`
         );
     }
 
@@ -185,10 +220,16 @@ function cmdCreate(args: string[]): number {
     if (hasFrom) {
         if (!from) {
             throw new ShannonError(
-                'usage: shannon create <name> --from <src> [--with-credentials]'
+                `usage: ${provider.command} create <name> --from <src> [--with-credentials]`
             );
         }
-        const dir = copyProfile(from, name, { withCredentials });
+        const dir = copyProfile(
+            from,
+            name,
+            { withCredentials },
+            process.env,
+            provider
+        );
         process.stdout.write(`Created profile: ${name} (from '${from}')\n`);
         printCopyResult(dir, withCredentials);
         return 0;
@@ -202,7 +243,7 @@ function cmdCreate(args: string[]): number {
         );
     }
 
-    const dir = createProfile(name);
+    const dir = createProfile(name, process.env, provider);
     process.stdout.write(`Created profile: ${name}\n`);
     process.stdout.write(`Config directory: ${dir}\n`);
     return 0;
@@ -271,16 +312,16 @@ function parseCreate(args: string[]): {
     return { name, from, withCredentials, hasFrom };
 }
 
-function cmdList(): number {
-    const names = listProfiles();
+function cmdList(provider: Provider): number {
+    const names = listProfiles(process.env, provider);
     if (names.length === 0) {
         process.stdout.write(
-            'No profiles found. Create one with: shannon create <name>\n'
+            `No profiles found. Create one with: ${provider.command} create <name>\n`
         );
         return 0;
     }
-    const def = getDefault();
-    const active = resolveActive().name;
+    const def = getDefault(process.env, provider);
+    const active = resolveActive(process.env, provider).name;
     for (const name of names) {
         const isDefault = name === def;
         const isActive = name === active;
@@ -297,56 +338,56 @@ function cmdList(): number {
     return 0;
 }
 
-function cmdDefault(args: string[]): number {
+function cmdDefault(args: string[], provider: Provider): number {
     const name = args[0];
     if (!name) {
-        const def = getDefault();
+        const def = getDefault(process.env, provider);
         if (!def) {
             throw new ShannonError(
-                'no default profile set. Set one with: shannon default <name>'
+                `no default profile set. Set one with: ${provider.command} default <name>`
             );
         }
         process.stdout.write(`${def}\n`);
         return 0;
     }
-    setDefault(name);
+    setDefault(name, process.env, provider);
     process.stdout.write(`Default profile set to: ${name}\n`);
     return 0;
 }
 
-function cmdWhich(args: string[]): number {
+function cmdWhich(args: string[], provider: Provider): number {
     const name = args[0];
     if (name) {
         assertValidName(name);
-        if (!profileExists(name)) {
+        if (!profileExists(name, process.env, provider)) {
             throw new ShannonError(
-                `profile '${name}' does not exist. Create it with: shannon create ${name}`
+                `profile '${name}' does not exist. Create it with: ${provider.command} create ${name}`
             );
         }
-        process.stdout.write(`${profileDir(name)}\n`);
+        process.stdout.write(`${profileDir(name, process.env, provider)}\n`);
         return 0;
     }
-    const def = getDefault();
+    const def = getDefault(process.env, provider);
     if (!def) {
         throw new ShannonError(
-            'no default profile set. Use: shannon default <name>'
+            `no default profile set. Use: ${provider.command} default <name>`
         );
     }
     assertValidName(def);
-    if (!profileExists(def)) {
+    if (!profileExists(def, process.env, provider)) {
         throw new ShannonError(`default profile '${def}' does not exist`);
     }
-    process.stdout.write(`${profileDir(def)}\n`);
+    process.stdout.write(`${profileDir(def, process.env, provider)}\n`);
     return 0;
 }
 
-async function cmdDelete(args: string[]): Promise<number> {
+async function cmdDelete(args: string[], provider: Provider): Promise<number> {
     const name = args[0];
     if (!name) {
-        throw new ShannonError('usage: shannon delete <name>');
+        throw new ShannonError(`usage: ${provider.command} delete <name>`);
     }
     assertValidName(name);
-    if (!profileExists(name)) {
+    if (!profileExists(name, process.env, provider)) {
         throw new ShannonError(`profile '${name}' does not exist`);
     }
     const force =
@@ -360,32 +401,32 @@ async function cmdDelete(args: string[]): Promise<number> {
         process.stdout.write('Cancelled.\n');
         return 0;
     }
-    deleteProfile(name);
+    deleteProfile(name, process.env, provider);
     process.stdout.write(`Deleted profile: ${name}\n`);
-    if (getDefault() === name) {
-        clearDefault();
+    if (getDefault(process.env, provider) === name) {
+        clearDefault(process.env, provider);
         process.stdout.write(`Cleared default profile (was "${name}")\n`);
     }
     return 0;
 }
 
-function cmdUse(args: string[]): number {
+function cmdUse(args: string[], provider: Provider): number {
     const { name, emit } = parseUse(args);
     if (!name) {
-        throw new ShannonError('usage: shannon use <name>');
+        throw new ShannonError(`usage: ${provider.command} use <name>`);
     }
     assertValidName(name);
-    if (!profileExists(name)) {
+    if (!profileExists(name, process.env, provider)) {
         throw new ShannonError(
-            `profile '${name}' does not exist. Create it with: shannon create ${name}`
+            `profile '${name}' does not exist. Create it with: ${provider.command} create ${name}`
         );
     }
-    const dir = profileDir(name);
+    const dir = profileDir(name, process.env, provider);
 
     // Used by the `shannon init` shell functions: emit just the raw export line
     // (on stdout, to be eval'd) and a confirmation (on stderr, for the human).
     if (emit) {
-        process.stdout.write(exportLine(emit, 'CLAUDE_CONFIG_DIR', dir) + '\n');
+        process.stdout.write(exportLine(emit, provider.configEnv, dir) + '\n');
         process.stderr.write(`Switched to profile: ${name}\n`);
         return 0;
     }
@@ -395,14 +436,14 @@ function cmdUse(args: string[]): number {
     // stdout (plain, so `eval`/redirect capture them cleanly).
     process.stderr.write(`Profile ${bold(name)} → ${dim(dir)}\n`);
     process.stderr.write(
-        `For automatic switching, run ${bold('shannon setup')} once. ` +
+        `For automatic switching, run ${bold(`${provider.command} setup`)} once. ` +
             `Or set it in this shell now:\n`
     );
     process.stdout.write(
-        `${exportLine('posix', 'CLAUDE_CONFIG_DIR', dir)}      # bash / zsh\n`
+        `${exportLine('posix', provider.configEnv, dir)}      # bash / zsh\n`
     );
     process.stdout.write(
-        `${exportLine('pwsh', 'CLAUDE_CONFIG_DIR', dir)}   # PowerShell\n`
+        `${exportLine('pwsh', provider.configEnv, dir)}   # PowerShell\n`
     );
     return 0;
 }
@@ -436,25 +477,31 @@ function parseUse(args: string[]): {
     return { name, emit };
 }
 
-function cmdClone(args: string[]): number {
+function cmdClone(args: string[], provider: Provider): number {
     const positional = args.filter(a => !a.startsWith('-'));
     const src = positional[0];
     const dst = positional[1];
     if (!src || !dst) {
         throw new ShannonError(
-            'usage: shannon clone <source> <dest> [--with-credentials]'
+            `usage: ${provider.command} clone <source> <dest> [--with-credentials]`
         );
     }
     const withCredentials = args.includes('--with-credentials');
-    const dir = copyProfile(src, dst, { withCredentials });
+    const dir = copyProfile(
+        src,
+        dst,
+        { withCredentials },
+        process.env,
+        provider
+    );
     process.stdout.write(`Cloned '${src}' -> '${dst}'\n`);
     printCopyResult(dir, withCredentials);
     return 0;
 }
 
-function cmdStatus(): number {
-    printBanner();
-    const resolved = resolveActive();
+function cmdStatus(provider: Provider): number {
+    printBanner(provider);
+    const resolved = resolveActive(process.env, provider);
     if (resolved.name) {
         process.stdout.write(`Active profile: ${resolved.name}\n`);
         process.stdout.write(`Config directory: ${resolved.dir}\n`);
@@ -465,19 +512,144 @@ function cmdStatus(): number {
     } else {
         process.stdout.write('No active profile\n');
     }
-    const def = getDefault();
+    const def = getDefault(process.env, provider);
     process.stdout.write(
         def ? `Default profile: ${def}\n` : 'No default profile set\n'
     );
+    if (provider === CODEX && resolved.dir && accountsEnabled(resolved.dir)) {
+        process.stdout.write(
+            `Active login: ${activeAccount(resolved.dir) ?? '(none selected)'}\n`
+        );
+    }
     return 0;
 }
 
-function cmdInit(args: string[]): number {
+function cmdAccount(args: string[]): number {
+    const action = args[0] ?? 'list';
+    const rest = args.slice(1);
+    const usage =
+        'usage: gpt account <list|save <name>|login <name> [--device-auth]|use <name> [--resume]|next [--resume]|unlock --yes>';
+    if (action === 'help' || action === '--help') {
+        process.stdout.write(`gpt account — saved logins for the active profile
+
+  list                       List saved logins (> marks the selected one)
+  save <name>                Name and save the profile's existing login
+  login <name> [--device-auth]  Sign in to a named login; preserve other logins
+  use <name> [--resume]       Select a login; optionally resume the last chat
+  next [--resume]            Cycle to the next saved login
+  unlock --yes              Recover a crashed launcher's lock after closing Codex
+
+History and settings stay in the same profile. Exit the running Codex session
+before switching. --resume continues the latest chat in the current directory.
+`);
+        return 0;
+    }
+    const resolved = resolveActive(process.env, CODEX);
+    if (!resolved.name || !resolved.dir) {
+        throw new ShannonError(
+            'select a managed profile first with gpt default <profile> or gpt use <profile>'
+        );
+    }
+    const home = resolved.dir;
+    if (action === 'list' || action === 'ls') {
+        if (rest.length) throw new ShannonError(usage);
+        const accounts = listAccounts(home);
+        if (!accounts.length)
+            process.stdout.write(
+                'No saved logins. Save the current login with gpt account save <name>, or add one with gpt account login <name>.\n'
+            );
+        for (const account of accounts) {
+            process.stdout.write(
+                `${account.active ? '>' : ' '} ${account.name}${account.signedIn ? '' : ' (signed out)'}\n`
+            );
+        }
+        return 0;
+    }
+    if (action === 'unlock') {
+        if (rest.length !== 1 || rest[0] !== '--yes') {
+            throw new ShannonError(
+                'close all Codex processes for this profile, then run: gpt account unlock --yes'
+            );
+        }
+        unlockAccounts(home);
+        process.stdout.write('Profile lock cleared.\n');
+        return 0;
+    }
+    if (action === 'save') {
+        if (rest.length !== 1 || rest[0]!.startsWith('-'))
+            throw new ShannonError(usage);
+        withAccountLock(home, () => saveAccount(home, rest[0]!));
+        process.stdout.write(`Saved current login as: ${rest[0]}\n`);
+        return 0;
+    }
+    if (action === 'login' || action === 'add') {
+        const name = rest[0];
+        if (
+            !name ||
+            name.startsWith('-') ||
+            rest.length > 2 ||
+            (rest[1] !== undefined && rest[1] !== '--device-auth')
+        ) {
+            throw new ShannonError(usage);
+        }
+        return withAccountLock(home, () => {
+            const temporary = prepareAccountLogin(home, name);
+            try {
+                const code = launch(
+                    ['login', ...rest.slice(1)],
+                    { ...process.env, CODEX_HOME: temporary },
+                    CODEX
+                );
+                if (code !== 0) return code;
+                finishAccountLogin(home, name, temporary);
+                process.stdout.write(
+                    `Saved login: ${name}\nActive login: ${activeAccount(home)}\n`
+                );
+                return 0;
+            } finally {
+                rmSync(temporary, { recursive: true, force: true });
+            }
+        });
+    }
+    if (action === 'use' || action === 'next') {
+        const resume = rest.includes('--resume');
+        const positional = rest.filter(arg => arg !== '--resume');
+        if (
+            rest.filter(arg => arg === '--resume').length > 1 ||
+            (action === 'next'
+                ? positional.length !== 0
+                : positional.length !== 1 || positional[0]!.startsWith('-'))
+        ) {
+            throw new ShannonError(usage);
+        }
+        const select = () => {
+            let name: string;
+            if (action === 'next') name = nextAccount(home);
+            else {
+                name = positional[0]!;
+                useAccount(home, name);
+            }
+            process.stdout.write(`Selected login: ${name}\n`);
+        };
+        if (resume)
+            return launch(['resume', '--last'], process.env, CODEX, select);
+        withAccountLock(home, select);
+        process.stdout.write(
+            'Continue the saved conversation with: gpt run resume --last\n'
+        );
+        return 0;
+    }
+    throw new ShannonError(usage);
+}
+
+function cmdInit(args: string[], provider: Provider): number {
     const shell = args[0];
     if (!shell) {
-        throw new ShannonError('usage: shannon init <bash|zsh|fish|pwsh>');
+        throw new ShannonError(
+            `usage: ${provider.command} init <bash|zsh|fish|pwsh>`
+        );
     }
-    const snippet = INIT_SNIPPETS[shell];
+    const snippet = initSnippet(shell, provider);
     if (!snippet) {
         throw new ShannonError(
             `unsupported shell '${shell}'. Supported: bash, zsh, fish, pwsh`
@@ -488,7 +660,7 @@ function cmdInit(args: string[]): number {
     // padded so it reads as code rather than a wall — the colour is cosmetic and
     // strips cleanly, so copying it still yields the exact same text.
     if (process.stdout.isTTY) {
-        printSnippetPretty(shell, snippet);
+        printSnippetPretty(shell, snippet, provider);
     } else {
         process.stdout.write(snippet);
     }
@@ -496,14 +668,18 @@ function cmdInit(args: string[]): number {
 }
 
 /** Render an `init` snippet for human eyes: highlighted, indented, breathing. */
-function printSnippetPretty(shell: string, snippet: string): void {
+function printSnippetPretty(
+    shell: string,
+    snippet: string,
+    provider: Provider
+): void {
     const body = highlight(snippet.replace(/\n+$/, ''), flavorFor(shell))
         .split('\n')
         .map(line => (line ? `    ${line}` : ''))
         .join('\n');
     process.stdout.write(`\n${body}\n\n`);
     process.stdout.write(
-        `    ${dim('Tip: run')} ${bold('shannon setup')} ${dim('to add this for you.')}\n\n`
+        `    ${dim('Tip: run')} ${bold(`${provider.command} setup`)} ${dim('to add this for you.')}\n\n`
     );
 }
 
@@ -514,7 +690,7 @@ function printSnippetPretty(shell: string, snippet: string): void {
  * print just that line to paste. Non-interactively it only prints instructions —
  * it never edits a file without a yes.
  */
-async function cmdSetup(args: string[]): Promise<number> {
+async function cmdSetup(args: string[], provider: Provider): Promise<number> {
     const requested = args[0];
     let shell: Shell;
     if (requested !== undefined) {
@@ -527,10 +703,14 @@ async function cmdSetup(args: string[]): Promise<number> {
     } else {
         shell = detectShell();
     }
-    const line = integrationLine(shell);
+    const line = integrationLine(shell, provider.command);
     const file = resolveStartupFile(shell);
 
-    if (file && existsSync(file) && alreadyInstalled(readFileSync(file, 'utf8'))) {
+    if (
+        file &&
+        existsSync(file) &&
+        alreadyInstalled(readFileSync(file, 'utf8'), provider.command)
+    ) {
         process.stdout.write(
             `${green('✓')} Shell integration already set up in ${bold(file)}.\n`
         );
@@ -548,8 +728,8 @@ async function cmdSetup(args: string[]): Promise<number> {
     }
 
     process.stdout.write(
-        `\nSet up ${bold(shell)} integration so ${bold('shannon use')} switches the ` +
-            `live shell and a ${bold('.shannon')} file auto-selects a profile per directory.\n\n`
+        `\nSet up ${bold(shell)} integration so ${bold(`${provider.command} use`)} switches the ` +
+            `live shell and a ${bold(provider.marker)} file auto-selects a profile per directory.\n\n`
     );
     const choice = await promptMenu([
         file
@@ -562,18 +742,22 @@ async function cmdSetup(args: string[]): Promise<number> {
     if (choice === 0) {
         if (!file) {
             process.stdout.write(
-                yellow('\nCould not locate your PowerShell $PROFILE automatically.\n')
+                yellow(
+                    '\nCould not locate your PowerShell $PROFILE automatically.\n'
+                )
             );
             printManualSetup(shell, line, file);
             return 0;
         }
         mkdirSync(dirname(file), { recursive: true });
-        appendFileSync(file, blockToAppend(shell));
+        appendFileSync(file, blockToAppend(shell, provider.command));
         process.stdout.write(
-            `\n${green('✓')} Added shannon integration to ${bold(file)}.\n`
+            `\n${green('✓')} Added ${provider.command} integration to ${bold(file)}.\n`
         );
         process.stdout.write(
-            dim(`  Restart your shell (or run ${reloadHint(shell)}) to activate it.\n`)
+            dim(
+                `  Restart your shell (or run ${reloadHint(shell)}) to activate it.\n`
+            )
         );
         return 0;
     }
@@ -662,7 +846,9 @@ async function promptMenu(options: string[]): Promise<number> {
             const n = Number.parseInt(answer, 10);
             if (n >= 1 && n <= options.length) return n - 1;
             process.stdout.write(
-                yellow(`Please enter a number between 1 and ${options.length}.\n`)
+                yellow(
+                    `Please enter a number between 1 and ${options.length}.\n`
+                )
             );
         }
     } finally {
@@ -677,20 +863,20 @@ async function promptMenu(options: string[]): Promise<number> {
  * is the reason the directory is passed explicitly — its location is not always
  * reflected in the spawned process's cwd.
  */
-function cmdAuto(args: string[]): number {
+function cmdAuto(args: string[], provider: Provider): number {
     const shell = args[0] ?? 'posix';
     const cwd = args[1] ?? process.cwd();
-    const action = resolveAuto(cwd);
+    const action = resolveAuto(cwd, process.env, provider);
     if (action.kind === 'set') {
         process.stdout.write(
-            exportLine(shell, 'CLAUDE_CONFIG_DIR', action.dir) + '\n'
+            exportLine(shell, provider.configEnv, action.dir) + '\n'
         );
         process.stdout.write(
-            exportLine(shell, 'SHANNON_AUTO', action.name) + '\n'
+            exportLine(shell, provider.autoEnv, action.name) + '\n'
         );
     } else if (action.kind === 'unset') {
-        process.stdout.write(unsetLine(shell, 'CLAUDE_CONFIG_DIR') + '\n');
-        process.stdout.write(unsetLine(shell, 'SHANNON_AUTO') + '\n');
+        process.stdout.write(unsetLine(shell, provider.configEnv) + '\n');
+        process.stdout.write(unsetLine(shell, provider.autoEnv) + '\n');
     }
     return 0;
 }
@@ -715,7 +901,9 @@ async function cmdUpdate(): Promise<number> {
         return 0;
     }
     if (isNewer(latest, VERSION)) {
-        process.stdout.write(`Latest version:  ${latest}  (update available)\n\n`);
+        process.stdout.write(
+            `Latest version:  ${latest}  (update available)\n\n`
+        );
         process.stdout.write(upgradeHint());
     } else {
         process.stdout.write(`You're on the latest version.\n`);
@@ -733,12 +921,12 @@ async function cmdCheckUpdates(): Promise<number> {
 }
 
 /** The one-line CTA appended to ordinary commands when an update is pending. */
-function emitUpdateNotice(): void {
+function emitUpdateNotice(provider: Provider): void {
     const latest = pendingUpdate(VERSION);
     if (!latest) return;
     process.stderr.write(
         `\nA new shannon release is available: ${VERSION} → ${latest}. ` +
-            `Run 'shannon update' to upgrade.\n`
+            `Run '${provider.command} update' to upgrade.\n`
     );
 }
 
@@ -751,9 +939,9 @@ function upgradeHint(): string {
     );
 }
 
-function printHelp(): number {
-    printBanner();
-    process.stdout.write(HELP);
+function printHelp(provider: Provider): number {
+    printBanner(provider);
+    process.stdout.write(help(provider));
     return 0;
 }
 
@@ -763,16 +951,14 @@ function printHelp(): number {
  * Shannon's output), the portrait would be noise or corrupt the consumed text,
  * so it is suppressed there.
  */
-function printBanner(): void {
+function printBanner(provider: Provider): void {
     if (!process.stdout.isTTY) return;
     process.stdout.write(banner() + '\n');
     process.stdout.write(
-        `${bold(cyan('shannon'))} ${dim(`v${VERSION}`)} ` +
-            `${dim('— isolated Claude Code configuration profiles')}\n`
+        `${bold(cyan(provider.command))} ${dim(`v${VERSION}`)} ` +
+            `${dim(`— isolated ${provider.label} configuration profiles`)}\n`
     );
-    process.stdout.write(
-        dim('  Not affiliated with Anthropic · a nod to Claude Shannon\n')
-    );
+    process.stdout.write(dim(`  ${provider.attribution}\n`));
 }
 
 // --- helpers ---
@@ -822,136 +1008,17 @@ async function confirm(prompt: string): Promise<boolean> {
     }
 }
 
-// --- shell integration snippets (emitted by `shannon init <shell>`) ---
-//
-// Each defines shannon/claudep/clp wrappers that forward to the real binary
-// (`command shannon`), but special-case `use` by eval'ing the binary's emitted
-// export line so it mutates the *live* shell. A directory hook runs `__auto` on
-// every change of working directory to apply per-directory `.shannon` files.
-// The wrappers call the `shannon` binary by name, so it must be on PATH (it is
-// installed alongside claudep/clp).
-
-const BASH_INIT = `# shannon shell integration — add to ~/.bashrc:
-#   eval "$(shannon init bash)"
-shannon() {
-  if [ "\${1:-}" = "use" ]; then
-    local __out
-    __out="$(command shannon "$@" --emit posix)" || return $?
-    [ -n "$__out" ] && eval "$__out"
-    return 0
-  fi
-  command shannon "$@"
-}
-claudep() { shannon "$@"; }
-clp() { shannon "$@"; }
-
-__shannon_auto() {
-  [ "$PWD" = "\${__shannon_last_pwd:-}" ] && return 0
-  __shannon_last_pwd="$PWD"
-  local __out
-  __out="$(command shannon __auto posix "$PWD" 2>/dev/null)" || return 0
-  [ -n "$__out" ] && eval "$__out"
-}
-case ";\${PROMPT_COMMAND:-};" in
-  *";__shannon_auto;"*) ;;
-  *) PROMPT_COMMAND="__shannon_auto\${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;;
-esac
-`;
-
-const ZSH_INIT = `# shannon shell integration — add to ~/.zshrc:
-#   eval "$(shannon init zsh)"
-shannon() {
-  if [ "\${1:-}" = "use" ]; then
-    local __out
-    __out="$(command shannon "$@" --emit posix)" || return $?
-    [ -n "$__out" ] && eval "$__out"
-    return 0
-  fi
-  command shannon "$@"
-}
-claudep() { shannon "$@"; }
-clp() { shannon "$@"; }
-
-__shannon_auto() {
-  [ "$PWD" = "\${__shannon_last_pwd:-}" ] && return 0
-  __shannon_last_pwd="$PWD"
-  local __out
-  __out="$(command shannon __auto posix "$PWD" 2>/dev/null)" || return 0
-  [ -n "$__out" ] && eval "$__out"
-}
-autoload -Uz add-zsh-hook 2>/dev/null && add-zsh-hook precmd __shannon_auto
-`;
-
-const FISH_INIT = `# shannon shell integration — add to ~/.config/fish/config.fish:
-#   shannon init fish | source
-function shannon
-    if test (count $argv) -ge 1; and test "$argv[1]" = use
-        for __line in (command shannon $argv --emit fish)
-            eval $__line
-        end
-        return 0
-    end
-    command shannon $argv
-end
-function claudep; shannon $argv; end
-function clp; shannon $argv; end
-
-function __shannon_auto --on-variable PWD
-    for __line in (command shannon __auto fish "$PWD" 2>/dev/null)
-        eval $__line
-    end
-end
-__shannon_auto
-`;
-
-const PWSH_INIT = `# shannon shell integration — add to your $PROFILE:
-#   shannon init pwsh | Out-String | Invoke-Expression
-function shannon {
-    $__exe = (Get-Command shannon -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
-    if (-not $__exe) { Write-Error "shannon: binary not found on PATH"; return }
-    if ($args.Count -ge 1 -and $args[0] -eq 'use') {
-        $__out = & $__exe @args --emit pwsh
-        if ($__out) { $__out | ForEach-Object { Invoke-Expression $_ } }
-        return
-    }
-    & $__exe @args
-}
-Set-Alias -Name claudep -Value shannon -Force
-Set-Alias -Name clp -Value shannon -Force  # -Force: clp is a read-only built-in alias
-
-function __Shannon-Auto {
-    if ($PWD.Path -eq $Global:__ShannonLastPwd) { return }
-    $Global:__ShannonLastPwd = $PWD.Path
-    $__exe = (Get-Command shannon -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
-    if (-not $__exe) { return }
-    $__out = & $__exe __auto pwsh $PWD.Path 2>$null
-    if ($__out) { $__out | ForEach-Object { Invoke-Expression $_ } }
-}
-if (-not (Test-Path Function:\\__Shannon-OrigPrompt)) {
-    if (Test-Path Function:\\prompt) {
-        Rename-Item Function:\\prompt Function:\\__Shannon-OrigPrompt
-    }
-}
-function prompt {
-    __Shannon-Auto
-    if (Test-Path Function:\\__Shannon-OrigPrompt) { __Shannon-OrigPrompt } else { "PS $($PWD.Path)> " }
-}
-`;
-
-const INIT_SNIPPETS: Record<string, string> = {
-    bash: BASH_INIT,
-    zsh: ZSH_INIT,
-    fish: FISH_INIT,
-    pwsh: PWSH_INIT,
-    powershell: PWSH_INIT
-};
-
-const HELP = `shannon — manage isolated Claude Code configuration profiles
+function help(provider: Provider): string {
+    const storage =
+        provider === CLAUDE
+            ? "Profiles use the original shell tool's storage, so existing profiles are picked up automatically."
+            : 'Profiles use codex-profiles storage, separate from Claude profiles and ~/.codex.\nSign in to each account with gpt run login after selecting its profile.';
+    return `${provider.command} — manage isolated ${provider.label} configuration profiles
 
 Usage:
-  shannon                         Show active + default profile status
-  shannon <command> [args...]     Manage profiles (see commands below)
-  shannon run [claude args...]    Launch Claude Code with the active profile (use -- to end shannon parsing)
+  ${provider.command}                         Show active + default profile status
+  ${provider.command} <command> [args...]     Manage profiles (see commands below)
+  ${provider.command} run [${provider.binary} args...]    Launch ${provider.label} with the active profile (use -- to end ${provider.command} parsing)
 
 Commands:
   create <name>            Create a new profile (--from <src> [--with-credentials] copies one)
@@ -962,7 +1029,7 @@ Commands:
   clone <src> <dst>        Copy a profile (omits credentials; --with-credentials to include)
   delete, rm <name>        Delete a profile (--yes/-y/--force to skip confirmation)
   status, st               Show active + default profile
-  setup [shell]            Install shell integration (interactive; does it for you)
+${provider === CODEX ? '  account                 Manage saved logins within the active profile (account help)\n' : ''}  setup [shell]            Install shell integration (interactive; does it for you)
   init <shell>             Print raw shell integration (bash | zsh | fish | pwsh)
   update, upgrade          Check for a newer release and show how to upgrade
   help, -h, --help         Show this help
@@ -970,13 +1037,13 @@ Commands:
 
 Shell integration (recommended):
   Add the matching line to your shell startup file, then 'use' switches the
-  live shell and a '.shannon' file in a directory auto-selects its profile:
-    bash   eval "$(shannon init bash)"          # ~/.bashrc
-    zsh    eval "$(shannon init zsh)"            # ~/.zshrc
-    fish   shannon init fish | source           # ~/.config/fish/config.fish
-    pwsh   shannon init pwsh | Out-String | Invoke-Expression   # $PROFILE
+  live shell and a '${provider.marker}' file in a directory auto-selects its profile:
+    bash   eval "$(${provider.command} init bash)"          # ~/.bashrc
+    zsh    eval "$(${provider.command} init zsh)"            # ~/.zshrc
+    fish   ${provider.command} init fish | source           # ~/.config/fish/config.fish
+    pwsh   ${provider.command} init pwsh | Out-String | Invoke-Expression   # $PROFILE
 
-Profiles are stored in the same location as the original shell tool, so
-existing profiles are picked up automatically. Commands shannon, claudep, and
-clp are interchangeable. Not affiliated with Anthropic.
+${storage}
+${provider.aliases.length ? `Commands ${provider.command}, ${provider.aliases.join(', ')} are interchangeable. ` : ''}${provider.attribution}.
 `;
+}

@@ -28,14 +28,14 @@ export function detectShell(env: NodeJS.ProcessEnv = process.env): Shell {
  * integration on every shell launch via `shannon init`, so the startup file
  * stays one readable line instead of a wall of function definitions.
  */
-export function integrationLine(shell: Shell): string {
+export function integrationLine(shell: Shell, command = 'shannon'): string {
     switch (shell) {
         case 'fish':
-            return 'shannon init fish | source';
+            return `${command} init fish | source`;
         case 'pwsh':
-            return 'shannon init pwsh | Out-String | Invoke-Expression';
+            return `${command} init pwsh | Out-String | Invoke-Expression`;
         default:
-            return `eval "$(shannon init ${shell})"`;
+            return `eval "$(${command} init ${shell})"`;
     }
 }
 
@@ -68,11 +68,21 @@ export function startupFile(
 export const MARKER = '# shannon shell integration (added by: shannon setup)';
 
 /** Whether a startup file's contents already wire up shannon. */
-export function alreadyInstalled(content: string): boolean {
-    return content.includes(MARKER) || /shannon init\b/.test(content);
+export function alreadyInstalled(
+    content: string,
+    command = 'shannon'
+): boolean {
+    return (
+        content.includes(integrationMarker(command)) ||
+        new RegExp(`\\b${command} init\\b`).test(content)
+    );
+}
+
+function integrationMarker(command: string): string {
+    return `# ${command} shell integration (added by: ${command} setup)`;
 }
 
 /** The block `setup` appends to a startup file (marker + the one line). */
-export function blockToAppend(shell: Shell): string {
-    return `\n${MARKER}\n${integrationLine(shell)}\n`;
+export function blockToAppend(shell: Shell, command = 'shannon'): string {
+    return `\n${integrationMarker(command)}\n${integrationLine(shell, command)}\n`;
 }

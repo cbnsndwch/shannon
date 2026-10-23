@@ -19,11 +19,14 @@
 // execPath ? 1 : 2` heuristic broke on POSIX for every non-absolute invocation,
 // because argv[1] there is the as-invoked path, not the resolved execPath.)
 import { dispatch } from '../src/commands.js';
+import { providerForExecutable } from '../src/core/provider.js';
 
 const args = process.argv.slice(2);
 
 // `dispatch` resolves to a numeric exit code and never rejects (it wraps every
 // handler in an internal try/catch), so no `.catch` is needed here.
-dispatch(args).then(code => {
-    process.exitCode = code;
-});
+dispatch(args, providerForExecutable(process.argv[1] ?? process.execPath)).then(
+    code => {
+        process.exitCode = code;
+    }
+);

@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { profileDir } from './paths.js';
 import { profileExists } from './profiles.js';
 import { validateName } from './validate.js';
+import { CLAUDE, type Provider } from './provider.js';
 
 /** Per-directory marker file: plain text, a single profile name. */
 export const MARKER = '.shannon';
@@ -13,11 +14,14 @@ export const MARKER = '.shannon';
  * trimmed file contents (a profile name) or null when none is found. An empty
  * marker resolves to null — it explicitly means "no auto-selection here".
  */
-export function findMarker(cwd: string): string | null {
+export function findMarker(
+    cwd: string,
+    provider: Provider = CLAUDE
+): string | null {
     let dir = cwd;
     // eslint-disable-next-line no-constant-condition
     while (true) {
-        const file = join(dir, MARKER);
+        const file = join(dir, provider.marker);
         if (existsSync(file) && statSync(file).isFile()) {
             const name = readFileSync(file, 'utf8').trim();
             return name || null;
@@ -52,13 +56,14 @@ export type AutoAction =
  */
 export function resolveAuto(
     cwd: string,
-    env: NodeJS.ProcessEnv = process.env
+    env: NodeJS.ProcessEnv = process.env,
+    provider: Provider = CLAUDE
 ): AutoAction {
-    const have = env.SHANNON_AUTO ?? '';
-    const raw = findMarker(cwd);
+    const have = env[provider.autoEnv] ?? '';
+    const raw = findMarker(cwd, provider);
 
     let want = '';
-    if (raw && validateName(raw).ok && profileExists(raw, env)) {
+    if (raw && validateName(raw).ok && profileExists(raw, env, provider)) {
         want = raw;
     }
 
@@ -66,7 +71,11 @@ export function resolveAuto(
         return { kind: 'none' };
     }
     if (want) {
-        return { kind: 'set', name: want, dir: profileDir(want, env) };
+        return {
+            kind: 'set',
+            name: want,
+            dir: profileDir(want, env, provider)
+        };
     }
     return { kind: 'unset' };
 }

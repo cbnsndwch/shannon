@@ -1,18 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { stripVTControlCharacters } from 'node:util';
 import { flavorFor, highlight } from '../src/core/highlight.js';
-
-const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');
+import { CLAUDE, CODEX } from '../src/core/provider.js';
+import { initSnippet } from '../src/core/shell.js';
 
 /** Force colour on for the duration of `fn`, restoring the env after. */
 function withColor(fn: () => void): void {
     const prev = process.env.FORCE_COLOR;
+    const prevNoColor = process.env.NO_COLOR;
     process.env.FORCE_COLOR = '1';
+    delete process.env.NO_COLOR;
     try {
         fn();
     } finally {
         if (prev === undefined) delete process.env.FORCE_COLOR;
         else process.env.FORCE_COLOR = prev;
+        if (prevNoColor === undefined) delete process.env.NO_COLOR;
+        else process.env.NO_COLOR = prevNoColor;
     }
 }
 
@@ -31,7 +36,7 @@ test('highlight only adds colour — stripping it restores the source', () => {
     withColor(() => {
         const samples = [
             'function shannon() {\n  command shannon "$@"\n}',
-            'export CLAUDE_CONFIG_DIR=\'/home/u/.x\'   # comment',
+            "export CLAUDE_CONFIG_DIR='/home/u/.x'   # comment",
             'case ";${PROMPT_COMMAND:-};" in',
             '$__out = & $__exe @args --emit pwsh',
             'Set-Alias -Name clp -Value shannon -Force  # note',
@@ -41,7 +46,19 @@ test('highlight only adds colour — stripping it restores the source', () => {
             for (const src of samples) {
                 const out = highlight(src, flavor);
                 assert.ok(out.includes('\x1b['), 'expected colour codes');
-                assert.equal(stripAnsi(out), src, 'content must be preserved');
+                assert.equal(
+                    stripVTControlCharacters(out),
+                    src,
+                    'content must be preserved'
+                );
+            }
+        }
+        for (const provider of [CLAUDE, CODEX]) {
+            for (const shell of ['bash', 'zsh', 'fish', 'pwsh']) {
+                const src = initSnippet(shell, provider)!;
+                const out = highlight(src, flavorFor(shell));
+                assert.ok(out.includes('\x1b['));
+                assert.equal(stripVTControlCharacters(out), src);
             }
         }
     });

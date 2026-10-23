@@ -1,14 +1,15 @@
 # Shannon
 
-Manage isolated [Claude Code](https://claude.com/product/claude-code) configuration profiles — switch between work and personal accounts, different MCP setups, or separate settings without logging in and out. A zero-dependency TypeScript re-implementation of `claude-code-profiles`.
+Manage isolated [Claude Code](https://claude.com/product/claude-code) and [Codex CLI](https://learn.chatgpt.com/docs/cli) configuration profiles — switch between work and personal accounts, different MCP setups, or separate settings without logging in and out. A zero-dependency TypeScript re-implementation of `claude-code-profiles`, extended with `gpt` for your ChatGPT subscriptions through Codex CLI.
 
-> Shannon is an independent project, **not affiliated with or endorsed by Anthropic**. The name is a nod to Claude Shannon. It interoperates with Claude Code via the `CLAUDE_CONFIG_DIR` environment variable that Claude Code already supports.
+> Shannon is an independent project, **not affiliated with or endorsed by Anthropic or OpenAI**. The name is a nod to Claude Shannon. It interoperates with Claude Code via `CLAUDE_CONFIG_DIR` and Codex CLI via `CODEX_HOME`.
 
 ## Contents
 
 - [Why Shannon](#why-shannon)
 - [Install](#install)
 - [Quickstart](#quickstart)
+- [ChatGPT subscriptions with gpt](#chatgpt-subscriptions-with-gpt)
 - [Commands](#commands)
 - [Shell integration](#shell-integration)
 - [Environment](#environment)
@@ -39,7 +40,7 @@ pnpm add -g @cbnsndwch/shannon
 # or: npm i -g @cbnsndwch/shannon
 ```
 
-This installs three interchangeable commands — `shannon`, `claudep`, and `clp`. Use whichever you like. Requires Node 20 or newer. (pnpm is only required to *develop* Shannon; you can install the published package with any client.)
+This installs three interchangeable Claude Code commands — `shannon`, `claudep`, and `clp` — plus `gpt` for Codex CLI. Requires Node 22 or newer. (pnpm is only required to *develop* Shannon; you can install the published package with any client.) Install the real `claude` and/or `codex` CLI separately.
 
 To uninstall: `pnpm rm -g @cbnsndwch/shannon` (or `npm rm -g @cbnsndwch/shannon`).
 
@@ -56,7 +57,7 @@ chmod +x shannon-linux-x64
 mv shannon-linux-x64 ~/.local/bin/shannon
 ```
 
-Available targets: `shannon-linux-x64`, `shannon-linux-arm64`, `shannon-macos-x64`, `shannon-macos-arm64`, `shannon-win-x64.exe`. The binary behaves identically under any of the `shannon` / `claudep` / `clp` names — copy or symlink it to whichever you want.
+Available targets: `shannon-linux-x64`, `shannon-linux-arm64`, `shannon-macos-x64`, `shannon-macos-arm64`, `shannon-win-x64.exe`. The binary behaves identically under any of the `shannon` / `claudep` / `clp` names — copy or symlink it to whichever you want. Copy or symlink it as `gpt` (`gpt.exe` on Windows) to manage Codex profiles instead.
 
 - **macOS:** the binaries are ad-hoc-signed and not notarized. Clear quarantine before first run with `xattr -d com.apple.quarantine ./shannon-macos-arm64`, or right-click → Open.
 - **Windows:** the binary is unsigned, so SmartScreen may warn until it builds reputation; it still runs.
@@ -69,10 +70,99 @@ The `.sha256` sidecar lives in the same release as the binary, so it only confir
 pnpm add -g @cbnsndwch/shannon     # 1. install
 shannon create work                # 2. create a profile and...
 shannon default work               #    make it the default
-shannon                            # 3. launch Claude Code with that profile
+shannon run                        # 3. launch Claude Code with that profile
 ```
 
 That covers a single default profile. To switch profiles per-session with `shannon use` and to auto-select a profile when you `cd` into a project, set up [shell integration](#shell-integration) once — it is the recommended one-time setup.
+
+## ChatGPT subscriptions with gpt
+
+`gpt` provides the same profile commands for Codex CLI. Each profile has its own ChatGPT login, settings, MCP configuration, and history. It launches the real `codex` executable with `CODEX_HOME` set to the selected profile. It manages terminal sessions; ChatGPT browser and desktop sessions keep their own accounts.
+
+Set up shell integration once with `gpt setup` (or `gpt setup pwsh` on PowerShell), then restart your shell. Sign in to each subscription once:
+
+```sh
+gpt create personal
+gpt create work
+gpt default personal
+gpt use personal
+gpt run login             # sign in with your personal ChatGPT account
+gpt use work
+gpt run login             # sign in with your work ChatGPT account
+gpt run                   # launch Codex using work
+gpt use personal
+gpt run                   # launch Codex using personal
+```
+
+Choose **Sign in with ChatGPT** in each login flow to use that account's subscription. If the browser is already signed into another account, switch to the intended account before completing login. `gpt run login --device-auth` is also passed through to Codex. See [OpenAI's authentication documentation](https://learn.chatgpt.com/docs/auth).
+
+As with Shannon, bare `gpt` prints status. `gpt run …`, `gpt -- …`, and unrecognized subcommands such as `gpt login` pass arguments to Codex. All management commands below work with `gpt` in place of `shannon`, including `create --from`, `clone`, `delete`, `default`, `which`, `list`, `status`, `setup`, and `init`.
+
+| | Claude Code | Codex CLI |
+| --- | --- | --- |
+| Commands | `shannon`, `claudep`, `clp` | `gpt` |
+| Profile environment | `CLAUDE_CONFIG_DIR` | `CODEX_HOME` |
+| Storage folder | `claude-profiles` | `codex-profiles` |
+| Directory marker | `.shannon` | `.gpt` |
+| Auto-selection state | `SHANNON_AUTO` | `GPT_AUTO` |
+| Credentials omitted when copying | `.credentials.json` | `auth.json` |
+
+Codex profiles live under `%LOCALAPPDATA%\codex-profiles\` on Windows, or `$XDG_DATA_HOME/codex-profiles/` on Linux/macOS (default `~/.local/share/codex-profiles/`). They have their own `.default` marker and remain separate from Claude profiles and the usual `~/.codex` directory. An explicit `CODEX_HOME` overrides the saved default, just as `CLAUDE_CONFIG_DIR` does for Claude. With no selected or default profile, Codex uses its normal configuration.
+
+When a Codex home is selected, `gpt` supplies `-c "cli_auth_credentials_store='file'"` so the login is stored in that home's `auth.json`. This gives `clone` and `delete` predictable credential handling. `clone` and `create --from` omit `auth.json` and all saved login slots unless `--with-credentials` is given. Codex still honors admin-enforced authentication requirements.
+
+For directory auto-selection, put a Codex profile name in `.gpt`. Both integrations can be loaded in the same shell; `.shannon` and `.gpt` independently select their respective profiles. To add the Codex integration by hand:
+
+```sh
+# bash — ~/.bashrc
+eval "$(gpt init bash)"
+# zsh — ~/.zshrc
+eval "$(gpt init zsh)"
+# fish — ~/.config/fish/config.fish
+gpt init fish | source
+# PowerShell — $PROFILE
+gpt init pwsh | Out-String | Invoke-Expression
+```
+
+### Multiple logins in one profile
+
+A profile holds your client context: history, saved conversations, settings, and MCP configuration. Named logins within that profile let you choose which subscription to use while keeping that context in place.
+
+For a profile where you have already signed in, save that login under a name, then sign in to the second account:
+
+```sh
+gpt use client-a
+gpt account save primary
+gpt account login secondary       # complete the second ChatGPT login
+gpt account list                  # primary remains selected
+```
+
+For a fresh profile, start with `gpt account login primary` instead of `account save`. Each `account login` uses a temporary login home; failed or cancelled sign-ins leave the current profile login in place. Repeating `account login <name>` renews that named login. Add `--device-auth` to use Codex's device login flow.
+
+After exiting the current Codex session, switch accounts and continue the saved conversation:
+
+```sh
+gpt account use secondary --resume
+# Exit Codex when you want to change accounts again:
+gpt account next --resume
+```
+
+`--resume` launches `codex resume --last` in the same profile and current directory. For a specific saved conversation, use `gpt account use secondary`, then `gpt run resume <session-id>`. Switching preserves the profile's configuration and local transcripts. Resuming still depends on Codex and the selected account's access to any workspace, provider, or cloud resources the conversation uses. See [Codex resume](https://learn.chatgpt.com/docs/developer-commands#codex-resume).
+
+| Command | Effect |
+| --- | --- |
+| `gpt account list` (or bare `gpt account`) | List cached logins; `>` marks the selected login. |
+| `gpt account save <name>` | Save the profile's existing login under a name. |
+| `gpt account login <name> [--device-auth]` | Add or renew a login. The first login is selected automatically. |
+| `gpt account use <name> [--resume]` | Select a saved login, optionally continuing the last conversation. |
+| `gpt account next [--resume]` | Cycle through cached, signed-in slots by name. |
+| `gpt account unlock --yes` | Recover a crashed launcher's lock after closing every Codex process using the profile. Refuses to clear a live launcher's lock. |
+
+Saved credentials live in the profile's private `.gpt-accounts/<name>/auth.json` files. Switching saves any refreshed tokens before selecting the other login. A logout through `gpt` also clears that login's saved credentials; the other named logins remain available. Expired credentials are handled by Codex when the account is next used.
+
+Close existing Codex sessions before enabling named logins. Once enabled, a profile lock permits one `gpt`-launched Codex process at a time and prevents switching, cloning, or deleting the profile while that process runs. Named-login launches use `--no-daemon` so a shared background server cannot retain the previous account. Use a Codex CLI version that supports this flag. These locks coordinate `gpt`; close any processes using the same home through the real `codex` command before switching. Switching is explicit; `next` cycles once when invoked.
+
+`gpt clone` and `gpt create --from` omit the entire login store by default. `--with-credentials` copies every saved login as well as the current one; use fresh sign-ins for independently refreshed credentials in different profiles. Runtime lock files are never copied.
 
 ## Commands
 

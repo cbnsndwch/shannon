@@ -24,9 +24,10 @@ Run `pnpm test` and make sure it's green before opening a PR.
 2. **Zero / near-zero runtime dependencies.** If you reach for a runtime
    dependency, stop and reconsider — Shannon's value is having almost nothing to
    audit. (`esbuild` / `postject` are build-only devDependencies and never ship.)
-3. **Launcher launches; never shadow `claude`.** Shannon sets
-   `CLAUDE_CONFIG_DIR` and spawns the real `claude`; it must not define a
-   `claude` wrapper.
+3. **Launcher launches; never shadow `claude` or `codex`.** Shannon sets
+   `CLAUDE_CONFIG_DIR` and spawns the real `claude`; `gpt` sets `CODEX_HOME`
+   and spawns the real `codex`. Keep the two providers' storage and shell state
+   independent.
 4. **Keep "Claude" out of the package name / branding** and keep the
    "not affiliated with or endorsed by Anthropic" disclaimer. Nominative
    references that describe interop are fine.

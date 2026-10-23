@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dataDir, updateCacheFile } from './paths.js';
 
 // The published package and the registry endpoint for its current `latest`
@@ -56,7 +56,10 @@ function readCache(env: NodeJS.ProcessEnv = process.env): UpdateCache | null {
     try {
         const raw = readFileSync(updateCacheFile(env), 'utf8');
         const data = JSON.parse(raw) as UpdateCache;
-        if (typeof data.latest === 'string' && typeof data.checkedAt === 'number') {
+        if (
+            typeof data.latest === 'string' &&
+            typeof data.checkedAt === 'number'
+        ) {
             return data;
         }
     } catch {
@@ -65,7 +68,10 @@ function readCache(env: NodeJS.ProcessEnv = process.env): UpdateCache | null {
     return null;
 }
 
-function writeCache(latest: string, env: NodeJS.ProcessEnv = process.env): void {
+function writeCache(
+    latest: string,
+    env: NodeJS.ProcessEnv = process.env
+): void {
     try {
         mkdirSync(dataDir(env), { recursive: true });
         const data: UpdateCache = { checkedAt: Date.now(), latest };
@@ -134,7 +140,9 @@ export function pendingUpdate(
  * the internal `__check-updates` command with its stdio fully detached and is
  * unref'd, so it never blocks or delays the parent's exit.
  */
-export function refreshInBackground(env: NodeJS.ProcessEnv = process.env): void {
+export function refreshInBackground(
+    env: NodeJS.ProcessEnv = process.env
+): void {
     try {
         if (updatesDisabled(env)) return;
         if (cacheIsFresh(readCache(env))) return;

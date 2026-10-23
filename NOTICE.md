@@ -9,3 +9,6 @@ Shannon is not affiliated with, sponsored by, or endorsed by Anthropic.
 interoperates with Claude Code through the CLAUDE_CONFIG_DIR environment
 variable that Claude Code already supports. The project name is a reference to
 Claude Shannon.
+
+Shannon's `gpt` command interoperates with Codex CLI through `CODEX_HOME`.
+Shannon is not affiliated with, sponsored by, or endorsed by OpenAI.

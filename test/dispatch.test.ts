@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { dispatch } from '../src/commands.js';
+import { dispatch, VERSION } from '../src/commands.js';
 
 /** The env var that points at the profiles data dir on this platform. */
 const DATA_ENV =
@@ -57,7 +57,7 @@ test('-v and -V print shannon version, not claude', async () => {
         await withCapturedStatus(async out => {
             const code = await dispatch([flag]);
             assert.equal(code, 0);
-            assert.match(out().trim(), /^\d+\.\d+\.\d+$/);
+            assert.equal(out().trim(), VERSION);
         });
     }
 });

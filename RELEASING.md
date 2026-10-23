@@ -26,7 +26,7 @@ Verify the installed pnpm version supports OIDC trusted publishing before switch
 ## Cut a release
 
 1. Make sure `main` is green in CI.
-2. Bump `"version"` in `package.json`.
+2. Bump `"version"` in `package.json` and `VERSION` in `src/commands.ts` together (`test/version.test.ts` enforces this).
 3. Commit the bump.
 4. Tag it **exactly** matching the version, prefixed with `v`:
    ```sh
@@ -41,7 +41,7 @@ The tag push runs the `release` workflow:
 2. **release** — creates the GitHub Release (idempotent; `--verify-tag`,
    `--generate-notes`).
 3. **binaries** — builds one SEA binary per OS/arch, smoke-tests it (asserts
-   `--version` equals the tag, runs `list`), writes a `.sha256` sidecar, and
+   `--version` equals the tag, runs `list`, checks the `gpt` alias), writes a `.sha256` sidecar, and
    uploads both.
 4. **publish** — `pnpm publish --provenance` to npm. This runs **last**, gated on the
    binaries succeeding, so a binary failure never leaves npm ahead of the artifacts.
@@ -65,6 +65,10 @@ for the final tag.
 each bump re-run the local SEA build (below) and confirm both `--version` and `list`
 behave. `setup-node` downloads this Node from nodejs.org and checksum-verifies it —
 that download is the one unavoidable fetch in the pipeline.
+
+Binary jobs pin each Node architecture and assert it before building. macOS uses
+`macos-15-intel` for x64 and `macos-15` for arm64 so the release asset names match
+the embedded runtimes.
 
 ## Build a binary locally (verification)
 
@@ -118,9 +122,11 @@ would make the binary fall through to launching `claude` instead of listing prof
 
 - **npm (recommended):**
   ```sh
-  pnpm add -g @cbnsndwch/shannon   # needs Node >= 20
+  pnpm add -g @cbnsndwch/shannon   # needs Node >= 22
   ```
-  Installs the `shannon`, `claudep`, and `clp` commands.
+  Installs the `shannon`, `claudep`, `clp`, and `gpt` commands. Use
+  `pnpm add -g @cbnsndwch/shannon@next` for prereleases; this replaces the same
+  global package and command names. Install `@latest` to return to stable.
 - **Prebuilt binaries:** the user-facing download, checksum, and per-OS quarantine /
   SmartScreen instructions live in the README's [Prebuilt binaries](./README.md#prebuilt-binaries)
   section — keep that as the single source of truth and don't duplicate it here.

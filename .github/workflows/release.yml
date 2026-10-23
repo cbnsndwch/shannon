@@ -70,29 +70,39 @@ jobs:
         include:
           - os: ubuntu-latest
             target: linux-x64
+            arch: x64
             ext: ''
           - os: ubuntu-24.04-arm
             target: linux-arm64
+            arch: arm64
             ext: ''
-          - os: macos-latest
+          - os: macos-15-intel
             target: macos-x64
+            arch: x64
             ext: '' # Intel
-          - os: macos-latest
+          - os: macos-15
             target: macos-arm64
+            arch: arm64
             ext: '' # Apple Silicon
           - os: windows-latest
             target: win-x64
+            arch: x64
             ext: '.exe'
     defaults:
       run:
         shell: bash # Git Bash on Windows; one syntax across every runner.
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SHANNON_NO_UPDATE_CHECK: '1'
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: ${{ env.NODE_VERSION }}
+          architecture: ${{ matrix.arch }}
+      - name: Verify target architecture
+        run: |
+          node -e "if(process.arch !== process.argv[1]) throw new Error('Node architecture mismatch: '+process.arch)" "${{ matrix.arch }}"
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
 
@@ -136,6 +146,14 @@ jobs:
             exit 1
           fi
           ./shannon${{ matrix.ext }} list </dev/null    # catches an SEA argv-offset bug
+          # The same executable selects Codex when invoked under the gpt name.
+          cp "shannon${{ matrix.ext }}" "gpt${{ matrix.ext }}"
+          GPT_HELP="$(./gpt${{ matrix.ext }} help)"
+          case "$GPT_HELP" in
+            "gpt — manage isolated Codex CLI"*) ;;
+            *) echo "::error::gpt executable did not select the Codex provider"; exit 1;;
+          esac
+          ./gpt${{ matrix.ext }} list </dev/null
 
       - name: Stage artifact + SHA-256 sidecar
         run: |
