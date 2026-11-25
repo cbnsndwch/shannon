@@ -15,16 +15,54 @@ export function flavorFor(shell: string): Flavor {
 
 const KEYWORDS: Record<Flavor, Set<string>> = {
     sh: new Set([
-        'function', 'if', 'then', 'elif', 'else', 'fi', 'for', 'while',
-        'until', 'in', 'do', 'done', 'case', 'esac', 'return', 'local',
-        'export', 'unset', 'set', 'eval', 'command', 'autoload', 'source',
-        'add-zsh-hook', 'test', 'end'
+        'function',
+        'if',
+        'then',
+        'elif',
+        'else',
+        'fi',
+        'for',
+        'while',
+        'until',
+        'in',
+        'do',
+        'done',
+        'case',
+        'esac',
+        'return',
+        'local',
+        'export',
+        'unset',
+        'set',
+        'eval',
+        'command',
+        'autoload',
+        'source',
+        'add-zsh-hook',
+        'test',
+        'end'
     ]),
     pwsh: new Set([
-        'function', 'if', 'elseif', 'else', 'return', 'param', 'for',
-        'foreach', 'while', 'switch', 'Set-Alias', 'Get-Command',
-        'Select-Object', 'ForEach-Object', 'Invoke-Expression', 'Write-Error',
-        'Test-Path', 'Rename-Item', 'Remove-Item', 'Out-String'
+        'function',
+        'if',
+        'elseif',
+        'else',
+        'return',
+        'param',
+        'for',
+        'foreach',
+        'while',
+        'switch',
+        'Set-Alias',
+        'Get-Command',
+        'Select-Object',
+        'ForEach-Object',
+        'Invoke-Expression',
+        'Write-Error',
+        'Test-Path',
+        'Rename-Item',
+        'Remove-Item',
+        'Out-String'
     ])
 };
 
@@ -87,7 +125,11 @@ function highlightLine(line: string, flavor: Flavor): string {
         }
 
         // PowerShell parameter flags (-Name, -Value) read better with colour.
-        if (flavor === 'pwsh' && c === '-' && /[A-Za-z]/.test(line[i + 1] ?? '')) {
+        if (
+            flavor === 'pwsh' &&
+            c === '-' &&
+            /[A-Za-z]/.test(line[i + 1] ?? '')
+        ) {
             const m = /^-[A-Za-z]+/.exec(line.slice(i))!;
             out += blue(m[0]);
             i += m[0].length;
