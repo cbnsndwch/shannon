@@ -49,11 +49,11 @@
         "prepublishOnly": "pnpm build"
     },
     "devDependencies": {
-        "@types/node": "^24.13.2",
-        "esbuild": "0.28.1",
+        "@types/node": "^24.19.2",
+        "esbuild": "0.28.2",
         "oxc": "^1.0.1",
         "oxfmt": "^0.56.0",
-        "oxlint": "^1.71.0",
+        "oxlint": "^1.95.0",
         "postject": "1.0.0-alpha.6",
         "typescript": "^5.6.0"
     },
