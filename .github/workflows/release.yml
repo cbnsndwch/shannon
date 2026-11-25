@@ -154,6 +154,13 @@ jobs:
             *) echo "::error::gpt executable did not select the Codex provider"; exit 1;;
           esac
           ./gpt${{ matrix.ext }} list </dev/null
+          # …and the desktop launcher when invoked as clpd.
+          cp "shannon${{ matrix.ext }}" "clpd${{ matrix.ext }}"
+          CLPD_HELP="$(./clpd${{ matrix.ext }} help)"
+          case "$CLPD_HELP" in
+            "clpd — run the Claude desktop app"*) ;;
+            *) echo "::error::clpd executable did not select the desktop launcher"; exit 1;;
+          esac
 
       - name: Stage artifact + SHA-256 sidecar
         run: |
