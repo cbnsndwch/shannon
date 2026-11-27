@@ -3,7 +3,11 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { isNewer, pendingUpdate, updatesDisabled } from '../src/core/updates.js';
+import {
+    isNewer,
+    pendingUpdate,
+    updatesDisabled
+} from '../src/core/updates.js';
 import { dataDir, updateCacheFile } from '../src/core/paths.js';
 
 /** The env var that points at the profiles data dir on this platform. */

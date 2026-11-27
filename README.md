@@ -10,6 +10,7 @@ Manage isolated [Claude Code](https://claude.com/product/claude-code) and [Codex
 - [Install](#install)
 - [Quickstart](#quickstart)
 - [ChatGPT subscriptions with gpt](#chatgpt-subscriptions-with-gpt)
+- [Claude desktop app per profile with clpd (macOS)](#claude-desktop-app-per-profile-with-clpd-macos)
 - [Commands](#commands)
 - [Shell integration](#shell-integration)
 - [Environment](#environment)
@@ -40,7 +41,7 @@ pnpm add -g @cbnsndwch/shannon
 # or: npm i -g @cbnsndwch/shannon
 ```
 
-This installs three interchangeable Claude Code commands — `shannon`, `claudep`, and `clp` — plus `gpt` for Codex CLI. Requires Node 22 or newer. (pnpm is only required to *develop* Shannon; you can install the published package with any client.) Install the real `claude` and/or `codex` CLI separately.
+This installs three interchangeable Claude Code commands — `shannon`, `claudep`, and `clp` — plus `gpt` for Codex CLI and `clpd` for the Claude desktop app on macOS. Requires Node 22 or newer. (pnpm is only required to *develop* Shannon; you can install the published package with any client.) Install the real `claude` and/or `codex` CLI separately.
 
 To uninstall: `pnpm rm -g @cbnsndwch/shannon` (or `npm rm -g @cbnsndwch/shannon`).
 
@@ -57,7 +58,7 @@ chmod +x shannon-linux-x64
 mv shannon-linux-x64 ~/.local/bin/shannon
 ```
 
-Available targets: `shannon-linux-x64`, `shannon-linux-arm64`, `shannon-macos-x64`, `shannon-macos-arm64`, `shannon-win-x64.exe`. The binary behaves identically under any of the `shannon` / `claudep` / `clp` names — copy or symlink it to whichever you want. Copy or symlink it as `gpt` (`gpt.exe` on Windows) to manage Codex profiles instead.
+Available targets: `shannon-linux-x64`, `shannon-linux-arm64`, `shannon-macos-x64`, `shannon-macos-arm64`, `shannon-win-x64.exe`. The binary behaves identically under any of the `shannon` / `claudep` / `clp` names — copy or symlink it to whichever you want. Copy or symlink it as `gpt` (`gpt.exe` on Windows) to manage Codex profiles instead, or as `clpd` (macOS) for the [desktop launcher](#claude-desktop-app-per-profile-with-clpd-macos).
 
 - **macOS:** the binaries are ad-hoc-signed and not notarized. Clear quarantine before first run with `xattr -d com.apple.quarantine ./shannon-macos-arm64`, or right-click → Open.
 - **Windows:** the binary is unsigned, so SmartScreen may warn until it builds reputation; it still runs.
@@ -163,6 +164,37 @@ Saved credentials live in the profile's private `.gpt-accounts/<name>/auth.json`
 Close existing Codex sessions before enabling named logins. Once enabled, a profile lock permits one `gpt`-launched Codex process at a time and prevents switching, cloning, or deleting the profile while that process runs. Named-login launches use `--no-daemon` so a shared background server cannot retain the previous account. Use a Codex CLI version that supports this flag. These locks coordinate `gpt`; close any processes using the same home through the real `codex` command before switching. Switching is explicit; `next` cycles once when invoked.
 
 `gpt clone` and `gpt create --from` omit the entire login store by default. `--with-credentials` copies every saved login as well as the current one; use fresh sign-ins for independently refreshed credentials in different profiles. Runtime lock files are never copied.
+
+## Claude desktop app per profile with clpd (macOS)
+
+`clpd` runs the Claude desktop app once per Shannon profile, side by side with the normal app. Each instance gets:
+
+- the profile's `CLAUDE_CONFIG_DIR`, so Code sessions started from the app use that profile's settings, MCP servers, plugins and history instead of `~/.claude`;
+- its own app data folder (`~/Library/Application Support/Claude Profiles/<profile>`), so it has its own claude.ai login and window state;
+- its own name and a badged icon (`Claude ING`, `Claude CBN`, …) in the Dock and Cmd-Tab.
+
+```sh
+shannon create ING                       # Shannon profiles, as usual
+clpd app ING --color '#176047'           # build the ING app with a green badge
+clpd app CBN --color '#fbbf24'           # and CBN with a yellow one
+clpd ING                                 # open it (or bring it to the front)
+```
+
+Then drag `~/Applications/Claude ING.app` into the Dock. Pin that launcher, not the running instance's tile: the running tile would reopen the app without the profile's settings.
+
+| Command | What it does |
+| --- | --- |
+| `clpd [run] [profile] [--dry-run] [-- app args…]` | Open the profile's instance (the default profile when omitted), or bring it to the front if it is already running. Builds the instance on first use and rebuilds it after a Claude update. `--dry-run` prints what would run. |
+| `clpd app <profile> [--color #rrggbb] [--no-icon]` | Build or rebuild the profile's instance and its `~/Applications/Claude <profile>.app` launcher. The badge text is white or near-black depending on the colour; the colour is kept on later rebuilds (default `#d97757`). `--no-icon` keeps the stock icon. |
+| `clpd app-remove <profile>` (`unapp`) | Delete that launcher and instance. The profile and its app data stay. |
+| `clpd quit <profile>` | Quit the instance running a profile. |
+| `clpd status` (`st`) | List running instances with their profile and `CLAUDE_CONFIG_DIR`, and the built apps. |
+
+**How it works.** The instance is a hidden bundle under `~/Library/Application Support/shannon-desktop/instances/`. Every executable in it is a hard link to the file in `/Applications/Claude.app` (other files are hard links or APFS clones, so it takes no extra disk space), which keeps the signed binary that Gatekeeper and the Keychain already trust. Only the name (through localized `InfoPlist.strings`) and the icon are changed; the icon is drawn by a small Swift program compiled once with `swiftc` from the Xcode Command Line Tools (without them the instance keeps the stock icon). `clpd` opens the instance through LaunchServices as a new instance with `--user-data-dir` and `CLAUDE_CONFIG_DIR` set. The launcher in `~/Applications` is a small ad-hoc-signed app that runs `clpd run <profile>` and shows an alert if that fails.
+
+**App Management permission.** Building an instance links files out of `Claude.app`, which macOS only allows to apps with the App Management permission. Before the first `clpd app` (or first launch), open *System Settings → Privacy & Security → App Management* and turn it on for the app you run `clpd` from (Terminal, iTerm, Ghostty, your editor…). Without it the build stops with an error saying so. Opening an already-built instance needs no permission.
+
+Overrides: `SHANNON_DESKTOP_APP` (a Claude.app elsewhere), `SHANNON_DESKTOP_DATA_DIR`, `SHANNON_DESKTOP_INSTANCES_DIR`, `SHANNON_DESKTOP_APPS_DIR`. `clpd` is macOS-only for now; on other systems it exits with a "not supported on this platform yet" error.
 
 ## Commands
 
@@ -285,6 +317,18 @@ Shannon's storage is byte-compatible with the original shell tool (same director
 **`clone` (or `create --from`) didn't copy my login.**
 That's intentional: copies omit `.credentials.json` so you don't accidentally share credentials between profiles. Either sign in under the new profile, or re-run with `--with-credentials` to copy them.
 
+**`clpd`: macOS says "Claude ING" is damaged and can't be opened.**
+The instance's main executable must be a hard link to the one in `/Applications/Claude.app`; a copy is a new, unassessed file and Gatekeeper rejects the modified bundle. This happens when the build ran without the App Management permission or across volumes. Grant the permission (see [clpd](#claude-desktop-app-per-profile-with-clpd-macos)), keep your home folder on the same volume as `/Applications`, then rebuild with `clpd app <profile>`. If the dialog names the launcher in `~/Applications` instead, rebuild it the same way: `clpd` clears its quarantine flag and re-signs it.
+
+**`clpd`: the Dock shows the plain Claude icon or the name "Claude".**
+Rebuild with `clpd app <profile>` while the instance is not running (`clpd quit <profile>` first), then relaunch it. If the badge is missing, install the Xcode Command Line Tools (`xcode-select --install`) so `swiftc` can draw it. A tile pinned from the running instance shows that bundle as it was when pinned; pin `~/Applications/Claude <profile>.app` instead.
+
+**`clpd`: clicking the launcher shows "Claude ING could not be opened".**
+The alert shows the error `clpd` printed. Apps started from the Dock get a minimal `PATH`, so the launcher runs the exact `node` and `clpd` that built it, then falls back to `clpd` on a `PATH` extended with the usual node locations (fnm's default alias, Volta, Homebrew, `~/.local/bin`, pnpm's global bin). If you have since moved or upgraded Node, or removed the checkout `clpd` was built from, run `clpd app <profile>` again from a terminal to re-record it.
+
+**`clpd`: clicking the launcher opens the normal Claude window.**
+That happens when the instance is opened without LaunchServices' new-instance flag, for example by double-clicking the hidden instance bundle. Use the launcher or `clpd <profile>`.
+
 ## Features
 
 - Create, list, clone, and delete isolated Claude Code config profiles.
@@ -292,6 +336,7 @@ That's intentional: copies omit `.credentials.json` so you don't accidentally sh
 - Per-session switching (`shannon use`) and per-directory auto-select via a `.shannon` file, through shell integration for bash, zsh, fish, and PowerShell.
 - Copy-on-create (`clone`, `create --from <src>`), with credentials omitted by default.
 - Storage byte-compatible with `claude-code-profiles`, so existing profiles work with no migration.
+- `clpd` (macOS): the Claude desktop app once per profile, each with its own login, Code config, name and badged Dock icon.
 - Distributed via npm (with provenance) and prebuilt single-file binaries on GitHub Releases.
 
 ## Contributing

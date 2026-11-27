@@ -24,6 +24,7 @@
     "bin": {
         "claudep": "dist/src/cli.js",
         "clp": "dist/src/cli.js",
+        "clpd": "dist/src/clpd.js",
         "gpt": "dist/src/gpt.js",
         "shannon": "dist/src/cli.js"
     },

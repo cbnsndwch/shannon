@@ -20,13 +20,21 @@
 // because argv[1] there is the as-invoked path, not the resolved execPath.)
 import { dispatch } from '../src/commands.js';
 import { providerForExecutable } from '../src/core/provider.js';
+import {
+    dispatchDesktop,
+    isDesktopExecutable
+} from '../src/desktop/commands.js';
 
 const args = process.argv.slice(2);
+const invoked = process.argv[1] ?? process.execPath;
 
-// `dispatch` resolves to a numeric exit code and never rejects (it wraps every
-// handler in an internal try/catch), so no `.catch` is needed here.
-dispatch(args, providerForExecutable(process.argv[1] ?? process.execPath)).then(
-    code => {
-        process.exitCode = code;
-    }
-);
+// Both dispatchers resolve to a numeric exit code and never reject (each wraps
+// its handlers in a try/catch), so no `.catch` is needed here. Invoked as
+// `clpd`, the binary runs the desktop launcher, which re-runs this same binary
+// from its Dock launcher apps.
+(isDesktopExecutable(invoked)
+    ? dispatchDesktop(args, { selfCommand: [process.execPath] })
+    : dispatch(args, providerForExecutable(invoked))
+).then(code => {
+    process.exitCode = code;
+});

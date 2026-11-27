@@ -88,12 +88,12 @@ export function unicodeSupported(): boolean {
     // host advertises itself. Treat any of these as Unicode-capable.
     return Boolean(
         process.env.WT_SESSION || // Windows Terminal
-            process.env.TERM_PROGRAM === 'vscode' ||
-            process.env.ConEmuTask === '{cmd::Cmder}' || // ConEmu / cmder
-            process.env.TERM === 'xterm-256color' ||
-            process.env.TERM === 'alacritty' ||
-            process.env.TERMINAL_EMULATOR === 'JetBrains-JediTerm' ||
-            process.env.CI
+        process.env.TERM_PROGRAM === 'vscode' ||
+        process.env.ConEmuTask === '{cmd::Cmder}' || // ConEmu / cmder
+        process.env.TERM === 'xterm-256color' ||
+        process.env.TERM === 'alacritty' ||
+        process.env.TERMINAL_EMULATOR === 'JetBrains-JediTerm' ||
+        process.env.CI
     );
 }
 
